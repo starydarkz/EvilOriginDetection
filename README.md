@@ -10,8 +10,9 @@ Herramienta capaz de analizar indicadores de compromiso y encontrar origenes mal
 git clone https://github.com/starydarkz/evilorigindetection.git
 ```
 1. Tener instalado Python3
-2. Instalar las dependencias necesarias:
+2. Instalar las dependencias necesarias usando el archivo requeriments:
 ```bash
+cd evilorigindetection
 pip3 install -r requeriments.txt
 ```
 
