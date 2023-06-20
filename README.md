@@ -5,7 +5,7 @@
 Herramienta capaz de analizar indicadores de compromiso y encontrar origenes maliciosos reportadas en fuentes de inteligencia de amenazas, reuniendo diferentes apis y analizando la informacion para dar un reporte detallado, preciso y resumido.
 
 ## Requisitos:
-1. Descargar repositorio, mediante .zip o git clone:
+1. Descargar repositorio desde la web o mediante git clone:
 ```bash
 git clone https://github.com/starydarkz/evilorigindetection.git
 ```
