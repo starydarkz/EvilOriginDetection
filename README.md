@@ -2,7 +2,8 @@
 ![](https://github.com/starydarkz/evilorigindetection/blob/main/image.png)
 
 
-Herramienta capaz de analizar indicadores de compromiso y encontrar origenes maliciosos reportadas en fuentes de inteligencia de amenazas, reuniendo diferentes apis y analizando la informacion para dar un reporte detallado, preciso y resumido.
+Herramienta capaz de analizar posibles IOC para encontrar la maldad reportada en diferentes fuentes de Threat Intellence y mostrar un resumen elegante desde la terminal, o un informe detallado en pdf/html.
+
 
 ## Requisitos:
 1. Descargar repositorio desde la web o mediante git clone:
