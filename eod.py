@@ -1,4 +1,4 @@
-#Version 2.0(en desarrollo)    By:StaryDark     Telegram:@Dark_zly   github.com/starydarkzly/evilorigindetection 
+#Version 2.0    By: StaryDark     Telegram: @Dark_zly   github.com/starydarkzly/evilorigindetection 
 
 import requests, json, re
 from urllib3 import disable_warnings
@@ -6,6 +6,11 @@ from colorama import Fore, init
 
 init()
 disable_warnings()
+
+#Tokens de APIS
+token_virustotal = "e551cf081d9319b4657544309baf4e36355b8e61dbc39cda50c97eac2e954fa1"
+token_abuseip = "c37cb9cbe5bd2edfb8a0b3fd6d3e317ed62a40400eb0282ffcb939a4a9aa58812af3e23f2d9cc17e"
+token_urlscan = "248c787c-2c58-4bd8-8576-86f29d2be7ca"
 
 menu = (Fore.WHITE + '''
 ________________________________________________________________
@@ -28,7 +33,7 @@ _______________________________________________________________|
 Target: [0 = Salir]\n--->'''+Fore.GREEN)
 
 
-
+#Funciones basicas
 def readcsv(csvfile):
     """Lee un archivo csv y retorna una lista"""
     
@@ -54,12 +59,12 @@ def clearwindow():
     else:
         system("clear")
 
-
-
 def is_valid_IP(str):
     return bool(re.match(r'^((0|[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\.|$)){4}$', str))
     
 
+
+#Fuentes de inteligencia
 def virustotal(inputurl):
   """Api de virustotal"""
 
@@ -70,8 +75,6 @@ def virustotal(inputurl):
     url = f"http://www.virustotal.com/api/v3/domains/{inputurl}"
 
   #Requests a la api
-  from default.credentials import token_virustotal  
-
   headers = {
       "Accept": "application/json",
       "x-apikey": f"{token_virustotal}"
