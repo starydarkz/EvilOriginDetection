@@ -26,9 +26,10 @@ Para configurar tus propios TOKEN de las APIS integradas, puedes remplazar el TO
 ```python
 token_virustotal = "-->> Poner tu TOKEN AQUI <<--"
 token_abuseip = "-->> Poner tu TOKEN AQUI <<--"
+ipinfo_token = "-->> Poner tu TOKEN AQUI <<--"
 ```
 
-ipinfo_token = "69162063957794"
+
 
 ## Ejecutar el script
 ```bash
