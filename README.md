@@ -17,6 +17,19 @@ cd evilorigindetection
 pip3 install -r requeriments.txt
 ```
 
+## Configuracion
+
+### Configuracion de TOKENS
+
+Para configurar tus propios TOKEN de las APIS integradas, puedes remplazar el TOKEN por defecto. Se recomienda usar vuestro token personal, ya que los que vienen por defecto son gratis, publicos y limitados.
+
+```python
+token_virustotal = "-->> Poner tu TOKEN AQUI <<--"
+token_abuseip = "-->> Poner tu TOKEN AQUI <<--"
+```
+
+ipinfo_token = "69162063957794"
+
 ## Ejecutar el script
 ```bash
 python3 eod.py
