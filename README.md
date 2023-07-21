@@ -4,6 +4,9 @@
 
 Herramienta capaz de analizar posibles IOC para encontrar la maldad reportada en diferentes fuentes de Threat Intellence y mostrar un resumen elegante desde la terminal, o un informe detallado en pdf/html.
 
+Actualmente es capaz de analizar:
+- Direcciones IPv4
+- Dominios
 
 ## Requisitos:
 1. Descargar repositorio desde la web o mediante git clone:
