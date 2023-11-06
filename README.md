@@ -16,7 +16,7 @@ git clone https://github.com/starydarkz/evilorigindetection.git
 2. Tener instalado Python3
 3. Instalar las dependencias necesarias usando el archivo requeriments:
 ```bash
-cd evilorigindetection
+cd EvilOriginDetection
 pip3 install -r requeriments.txt
 ```
 
