@@ -1,18 +1,20 @@
-#Version 2.1    By: StaryDark     Telegram: @Dark_zly   github.com/starydarkzly/EvilOriginDetection 
+#Version 2.2    By: StaryDark     Telegram: @Dark_zly   github.com/starydarkz/EvilOriginDetection 
 
-import requests, json, re
+#Tokens de APIS
+token_virustotal = "50015dd4014a8889b3ef9dba5b0e720cdd1ed1d11d0f5fbb99b6164f82614959"
+token_abuseip = "3e3fe339b6af4afd4105a45f1472fcc8f4952770d1755d9ee2e4aff930a5e648b6f29b2078c452f7"
+ipinfo_token = "4bad97d0bd0e8e"
+
+import requests, json, re, sys
 from urllib3 import disable_warnings
 from colorama import Fore, init
-import sys
+
 
 init()
 disable_warnings()
 
-#Tokens de APIS
-token_virustotal = "e551cf081d9319b4657544309baf4e36355b8e61dbc39cda50c97eac2e954fa1"
-token_abuseip = "c37cb9cbe5bd2edfb8a0b3fd6d3e317ed62a40400eb0282ffcb939a4a9aa58812af3e23f2d9cc17e"
 
-ipinfo_token = "69162063957794"
+
 menu = (Fore.WHITE + '''
 ________________________________________________________________
    .-._                                                   _,-, |
@@ -31,26 +33,10 @@ ________________________________________________________________
   \_/_StaryDark_/.                                             |
 _______________________________________________________________|
 
-Target: [0 = Salir]\n--->'''+Fore.GREEN)
+Target: [IPv4, Domain, 0 = Salir]\n--->'''+Fore.GREEN)
 
 
 #Funciones basicas
-def readcsv(csvfile):
-    """Lee un archivo csv y retorna una lista"""
-    
-    import csv
-    with open(csvfile, 'r', encoding="utf8") as csvfile:
-        content_csv = csv.reader(csvfile)
-        result = []
-        
-        for fila in content_csv:
-            result.append(fila)
-        if len(result) == 1:
-            lista = []
-            for element in range(0,len(result[0])):
-                lista.append(0)
-            result.append(lista)         
-    return result
 
 def clearwindow():
     """ Limpiar la terminal en cualquier sistema operativo"""
@@ -64,7 +50,7 @@ def is_valid_IP(str):
     return bool(re.match(r'^((0|[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\.|$)){4}$', str))
 
 
-#Fuentes de inteligencia
+#Funciones de investigacion en fuentes de ciberinteligencia
 def virustotal(inputurl):
   """Api de virustotal"""
 
@@ -173,6 +159,7 @@ def abuseip(inputurl):
   return total_reports, categorias
 
 
+#Manipulacion de datos
 def detect_unique_element(lista, categories):
     unique = []
     resultado = ""
@@ -198,8 +185,6 @@ def info(inputurl):
 
   print (Fore.WHITE + "Pais: " + Fore.GREEN + info["country"])
   print (Fore.WHITE + "Org: " + Fore.GREEN + info["org"])
-
-
 
 def format_tag(tags, category):
   """ Tomar una lista y convertira en STR separado por coma"""
@@ -245,18 +230,14 @@ def main (menu = menu):
     #AbuseIP  
     reportes, tags = abuseip(inputurl)
 
-    print (Fore.LIGHTCYAN_EX + "\n\n>>Investigacion realizada con AbuseIpDB")
+    print (Fore.LIGHTCYAN_EX + "\nInvestigacion realizada:")
     if reportes > 0:
-      print (Fore.WHITE + "\nTotal de reportes maliciosos: " + Fore.RED + str(reportes))
+      print (Fore.LIGHTCYAN_EX + "\n\n-->>AbuseIPDB:\n")
+      print (Fore.WHITE + "Total de reportes maliciosos: " + Fore.RED + str(reportes))
       if len(tags) > 1:
         print (Fore.WHITE + "\nCategorias:\n" + Fore.RED + tags)
     else:
-      print (Fore.WHITE + "AbuseIP:"  + Fore.GREEN + "Clean")
-
-
-
-
-
+      print (Fore.WHITE + "\nAbuseIP:"  + Fore.GREEN + "Clean")
 
   #VirusTotal
   try:
@@ -266,7 +247,7 @@ def main (menu = menu):
     sys.exit()
   if datosvirustotal["VT_EVIL"]:
     """ Trabajo de la data exportada de VT """
-    print (Fore.LIGHTCYAN_EX + "\n\n>>Investigacion realizada con Virustotal:\n")
+    print (Fore.LIGHTCYAN_EX + "\n-->> Virustotal:")
     data = format_tag(datosvirustotal["tags"], datosvirustotal["category"])
     if len(data) > 0:
       print (Fore.WHITE + "TAGS:" + Fore.RED + data)
@@ -278,8 +259,8 @@ def main (menu = menu):
     print (Fore.WHITE + "Virustotal: " + Fore.GREEN + "Clean")
 
 
-
+#Ejecucion Principal
 
 if __name__== "__main__":
   main()
-  print ("\n\n")
+  print ("\n")
