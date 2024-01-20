@@ -20,11 +20,14 @@ cd EvilOriginDetection
 pip3 install -r requeriments.txt
 ```
 
-## Configuracion
-
-### Configuracion de TOKENS
+## Configuracion de Tokens
 
 Para configurar tus propios TOKEN de las APIS integradas, puedes remplazar el TOKEN por defecto. Se recomienda usar vuestro token personal, ya que los que vienen por defecto son gratis, publicos y limitados.
+
+
+Abuseip: https://www.abuseipdb.com/
+Virustotal: https://www.virustotal.com/
+Ipinfo: https://ipinfo.io/
 
 ```python
 token_virustotal = "-->> Poner tu TOKEN AQUI <<--"
