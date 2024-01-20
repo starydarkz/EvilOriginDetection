@@ -1,5 +1,5 @@
 # Evil Origin Detection
-![](https://github.com/starydarkz/evilorigindetection/blob/main/image.png)
+![](https://github.com/starydarkz/EvilOriginDetection/blob/main/images/menu.png)
 
 
 Herramienta capaz de analizar posibles IOC para encontrar la maldad reportada en diferentes fuentes de Threat Intellence y mostrar un resumen elegante desde la terminal, o un informe detallado en pdf/html.
