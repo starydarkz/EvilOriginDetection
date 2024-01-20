@@ -34,7 +34,9 @@ ipinfo_token = "-->> Poner tu TOKEN AQUI <<--"
 
 
 
-## Ejecutar el script
+## Uso
 ```bash
 python3 eod.py
 ```
+![](https://github.com/starydarkz/EvilOriginDetection/blob/main/images/menu.png)
+![](https://github.com/starydarkz/EvilOriginDetection/blob/main/images/resultado.png)
