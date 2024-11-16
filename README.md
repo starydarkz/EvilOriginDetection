@@ -41,9 +41,8 @@ ipinfo_token = "-->> Poner tu TOKEN AQUI <<--"
 ```bash
 python3 eod.py
 ```
+
+## Capturas de Pantalla
 ![](https://github.com/starydarkz/EvilOriginDetection/blob/main/images/menu.png)
 
-Resultado:
-
-
-![](https://github.com/starydarkz/EvilOriginDetection/blob/main/images/resultado.png)
+![](https://github.com/starydarkz/EvilOriginDetection/blob/main/images/sample02.png)
