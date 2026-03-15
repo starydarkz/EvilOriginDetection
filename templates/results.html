@@ -1,0 +1,684 @@
+{% extends "base.html" %}
+{% block title %}{{ ioc.value }} — Evil Origin Detection{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+.results-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+.results-main { display: flex; flex-direction: column; gap: 16px; }
+.results-side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 66px; }
+.section-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.section-card-title { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text3); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.section-card-title::after { content:''; flex:1; height:0.5px; background:var(--border); }
+
+/* Score gauge */
+.score-gauge-wrap { display:flex; align-items:center; gap:20px; }
+.gauge-svg { flex-shrink:0; }
+.score-breakdown { flex:1; display:flex; flex-direction:column; gap:8px; }
+.score-row { display:flex; align-items:center; gap:10px; font-size:11px; }
+.score-row-label { width:100px; color:var(--text3); flex-shrink:0; }
+.score-row-bar { flex:1; height:5px; border-radius:3px; background:var(--bg3); overflow:hidden; }
+.score-row-fill { height:100%; border-radius:3px; transition:width 0.7s cubic-bezier(0.4,0,0.2,1); }
+.score-row-val { width:72px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); flex-shrink:0; }
+
+/* Source rows */
+.source-row { display:flex; align-items:center; padding:8px 10px; border-radius:7px; background:var(--bg3); border:0.5px solid var(--border); margin-bottom:6px; gap:10px; transition:border-color 0.15s; }
+.source-row:hover { border-color:var(--border2); }
+.source-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.source-name { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text); width:110px; flex-shrink:0; }
+.source-summary { flex:1; font-size:11px; color:var(--text2); }
+.source-link { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--blue); text-decoration:none; flex-shrink:0; transition:color 0.15s; }
+.source-link:hover { color:var(--accent); }
+.source-row.no-key { opacity:0.4; }
+.source-row.error  { opacity:0.6; }
+
+/* Tags */
+.tags-wrap { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+
+/* Tech info tabs */
+.tab-nav { display:flex; gap:2px; margin-bottom:14px; border-bottom:0.5px solid var(--border); padding-bottom:0; }
+.tab-btn { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.08em; padding:6px 12px; background:none; border:none; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* Geo */
+.geo-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+#geo-map { width:100%; height:170px; border-radius:8px; overflow:hidden; border:0.5px solid var(--border); background:var(--bg3); }
+
+/* Graph tooltip */
+#graph-tooltip { display:none; position:absolute; top:12px; right:12px; z-index:10; background:var(--surface-solid); border:0.5px solid var(--border2); border-radius:8px; padding:12px 14px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
+
+/* Rescan / cache status */
+.cache-bar { display:flex; align-items:center; gap:10px; padding:8px 14px; border-radius:7px; background:var(--bg3); border:0.5px solid var(--border); font-size:11px; color:var(--text3); margin-bottom:16px; }
+.cache-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.cache-dot.live   { background:var(--teal); box-shadow:0 0 5px var(--teal); }
+.cache-dot.cached { background:var(--blue); }
+.cache-dot.stale  { background:var(--warn); }
+
+/* Score number color helpers */
+.score-malicious { color:var(--v-malicious); }
+.score-suspicious{ color:var(--v-suspicious); }
+.score-clean     { color:var(--v-clean); }
+.score-unknown   { color:var(--v-unknown); }
+
+@media(max-width:900px){
+  .results-grid { grid-template-columns:1fr; }
+  .results-side  { position:static; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-wide">
+
+  {# ── TOP BAR ── #}
+  <div class="anim-fade-up" style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+    <a href="/" class="btn btn-ghost btn-sm">← Back</a>
+    <span class="ioc-type {{ ioc.type.value }}">{{ ioc.type.value.upper() }}</span>
+    <span class="mono" style="font-size:13px;color:var(--text);flex:1;word-break:break-all">{{ ioc.value }}</span>
+    <span class="badge badge-{{ ioc.verdict.value if ioc.verdict else 'unknown' }}">
+      {{ (ioc.verdict.value if ioc.verdict else 'unknown').capitalize() }}
+    </span>
+    {% if ioc.score is not none %}
+    <span class="mono score-{{ ioc.verdict.value if ioc.verdict else 'unknown' }}" style="font-size:14px;font-weight:700">
+      {{ ioc.score }}/100
+    </span>
+    {% endif %}
+
+    {# Export + Copy #}
+    <a href="/results/{{ ioc.id }}/export" class="btn btn-ghost btn-sm">↓ Export</a>
+    <button class="btn btn-ghost btn-sm" onclick="copyToClipboard('{{ ioc.value }}')">⎘ Copy</button>
+  </div>
+
+  {# ── CACHE STATUS BAR ── #}
+  <div class="cache-bar anim-fade-up anim-delay-1">
+    {% if not is_cached %}
+      <span class="cache-dot live"></span>
+      <span>Live result — just analyzed</span>
+    {% elif cache_age_h is not none and cache_age_h < 6 %}
+      <span class="cache-dot cached"></span>
+      <span>Cached result · {{ cache_age_h }}h ago</span>
+    {% else %}
+      <span class="cache-dot stale"></span>
+      <span>Cached result · {{ cache_age_h }}h ago — consider rescanning</span>
+    {% endif %}
+    <span style="flex:1"></span>
+    <form method="POST" action="/results/{{ ioc.id }}/rescan" style="display:inline">
+      <button type="submit" class="btn btn-ghost btn-sm">↺ Rescan</button>
+    </form>
+  </div>
+
+  <div class="results-grid">
+  <div class="results-main">
+
+    {# ══ SECTION 1: RISK SCORE ══ #}
+    <div class="section-card anim-fade-up anim-delay-1">
+      <div class="section-card-title">① Risk Score</div>
+      <div class="score-gauge-wrap">
+
+        {# SVG gauge ring #}
+        {% set score = ioc.score or 0 %}
+        {% set verdict = ioc.verdict.value if ioc.verdict else 'unknown' %}
+        {% set circumference = 163 %}
+        {% set dash = (score / 100 * circumference)|round|int %}
+        <svg class="gauge-svg" viewBox="0 0 80 80" width="90" height="90">
+          <circle cx="40" cy="40" r="26" fill="none" stroke="var(--bg3)" stroke-width="7"/>
+          <circle cx="40" cy="40" r="26" fill="none"
+            stroke="var(--v-{{ verdict }})"
+            stroke-width="7"
+            stroke-dasharray="{{ dash }} {{ circumference - dash }}"
+            stroke-dashoffset="40"
+            stroke-linecap="round"
+            transform="rotate(-90 40 40)"
+            style="transition:stroke-dasharray 0.8s ease"
+            opacity="0.85"/>
+          <text x="40" y="37" text-anchor="middle" dominant-baseline="central"
+                style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px;fill:var(--v-{{ verdict }})">
+            {{ score }}
+          </text>
+          <text x="40" y="52" text-anchor="middle"
+                style="font-family:'JetBrains Mono',monospace;font-size:7px;fill:var(--text3)">
+            /100
+          </text>
+        </svg>
+
+        {# Per-source breakdown bars #}
+        <div class="score-breakdown">
+          {% set source_weights = [
+            ('virustotal',  'VirusTotal',  45),
+            ('abuseipdb',   'AbuseIPDB',   20),
+            ('greynoise',   'GreyNoise',   15),
+            ('pulsedive',   'Pulsedive',   10),
+            ('malwarebazaar','MalwareBazaar',10),
+            ('criminalip',  'Criminal IP',  8),
+          ] %}
+          {% for src_key, src_label, weight in source_weights %}
+            {% set src = sources.get(src_key, {}) %}
+            {% if src.get('status') == 'ok' %}
+              {% set hint = src.get('verdict_hint', 'unknown') %}
+              {% set bar_color = 'var(--v-' ~ hint ~ ')' %}
+              {% set bar_pct = 0 %}
+              {% if src_key == 'virustotal' and src.get('total_engines') %}
+                {% set bar_pct = ((src.get('malicious_count',0) / src.get('total_engines',1)) * 100)|round|int %}
+              {% elif src_key == 'abuseipdb' %}
+                {% set bar_pct = src.get('abuse_score', 0) %}
+              {% elif hint == 'malicious' %}{% set bar_pct = 85 %}
+              {% elif hint == 'suspicious' %}{% set bar_pct = 50 %}
+              {% elif hint == 'clean' %}{% set bar_pct = 8 %}
+              {% endif %}
+              <div class="score-row">
+                <span class="score-row-label">{{ src_label }}</span>
+                <div class="score-row-bar">
+                  <div class="score-row-fill" style="width:{{ bar_pct }}%;background:{{ bar_color }}"></div>
+                </div>
+                <span class="score-row-val">
+                  {% if src_key == 'virustotal' %}
+                    {{ src.get('malicious_count',0) }}/{{ src.get('total_engines',0) }}
+                  {% elif src_key == 'abuseipdb' %}
+                    {{ src.get('abuse_score',0) }}%
+                  {% else %}
+                    {{ hint }}
+                  {% endif %}
+                </span>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# ══ SECTION 2: TAGS & CONTEXT ══ #}
+    <div class="section-card anim-fade-up anim-delay-2">
+      <div class="section-card-title">② Tags &amp; Context</div>
+      {% if tags %}
+      <div class="tags-wrap">
+        {% for tag in tags %}
+        <span class="tag-chip {% if 'malware' in tag or 'trojan' in tag or 'ransom' in tag or 'botnet' in tag or 'c2' in tag %}malicious{% elif 'scanner' in tag or 'spam' in tag %}info{% endif %}">
+          {{ tag }}
+        </span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="font-size:11px;color:var(--text3)">No tags found across sources.</p>
+      {% endif %}
+
+      {% if metadata %}
+      <div class="divider"></div>
+      <table class="info-table">
+        {% for key, val in metadata.items() %}
+        {% if val and key not in ['tags'] %}
+        <tr>
+          <td>{{ key.replace('_',' ').capitalize() }}</td>
+          <td>{{ val }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </table>
+      {% endif %}
+    </div>
+
+    {# ══ SECTION 5: CORRELATION GRAPH ══ #}
+    <div class="section-card anim-fade-up anim-delay-2">
+      <div class="section-card-title">⑤ Correlation Graph</div>
+      <div id="graph-container" data-ioc-id="{{ ioc.id }}" style="height:320px;position:relative">
+        <div class="graph-empty">
+          <span style="font-size:32px;opacity:0.2">◎</span>
+          <span style="font-size:11px">Loading graph...</span>
+        </div>
+        {# Tooltip panel #}
+        <div id="graph-tooltip">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:var(--text);margin-bottom:6px" id="tt-label"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+            <span class="ioc-type" id="tt-type-badge"></span>
+            <span class="badge" id="tt-verdict-badge"></span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:8px">
+            Score: <span id="tt-score" class="mono" style="color:var(--text)"></span>
+          </div>
+          <button id="tt-analyze" class="btn btn-primary btn-sm" style="display:none;width:100%;justify-content:center">
+            → Analyze
+          </button>
+        </div>
+      </div>
+      <p style="font-size:10px;color:var(--text3);margin-top:8px">
+        Click any node for details · Click expand to load related artifacts
+      </p>
+    </div>
+
+    {# ══ SECTION 6: TIMELINE ══ #}
+    <div class="section-card anim-fade-up anim-delay-3">
+      <div class="section-card-title">⑥ Activity Timeline</div>
+      {% if timeline %}
+      <ul class="timeline">
+        {% for event in timeline %}
+        <li class="timeline-item {{ event.verdict }}{% if event.get('current') %} current{% endif %}">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:12px;color:var(--text)">{{ event.summary }}</span>
+            {% if event.link %}
+            <a class="timeline-src-badge" href="{{ event.link }}" target="_blank" rel="noopener">
+              ↗ {{ event.label }}
+            </a>
+            {% else %}
+            <span class="timeline-src-badge" style="cursor:default">{{ event.label }}</span>
+            {% endif %}
+          </div>
+          {% if event.date %}
+          <span class="timeline-time">
+            {{ event.date[:19].replace('T', ' ') if event.date else '' }}
+          </span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p style="font-size:11px;color:var(--text3)">No timeline events available.</p>
+      {% endif %}
+    </div>
+
+    {# ══ SECTION 7: TECHNICAL INFO ══ #}
+    <div class="section-card anim-fade-up anim-delay-4">
+      <div class="section-card-title">⑦ Technical Information</div>
+
+      {# Tab navigation — shown conditionally per IOC type #}
+      <div class="tab-nav">
+        {% if ioc.type.value in ['ip'] %}
+        <button class="tab-btn active" onclick="switchTab('tab-network', this)">Network</button>
+        <button class="tab-btn" onclick="switchTab('tab-ports', this)">Ports</button>
+        {% endif %}
+        {% if ioc.type.value in ['ip','domain','url','email'] %}
+        <button class="tab-btn {% if ioc.type.value not in ['ip'] %}active{% endif %}"
+                onclick="switchTab('tab-whois', this)">WHOIS</button>
+        {% endif %}
+        {% if ioc.type.value in ['domain','url','email'] %}
+        <button class="tab-btn" onclick="switchTab('tab-dns', this)">DNS</button>
+        {% endif %}
+        {% if ioc.type.value in ['domain','url'] %}
+        <button class="tab-btn" onclick="switchTab('tab-screenshot', this)">Screenshot</button>
+        {% endif %}
+        {% if ioc.type.value == 'hash' %}
+        <button class="tab-btn active" onclick="switchTab('tab-file', this)">File Info</button>
+        {% endif %}
+        {% if ioc.type.value == 'email' %}
+        <button class="tab-btn" onclick="switchTab('tab-email', this)">Email OSINT</button>
+        {% endif %}
+      </div>
+
+      {# ── TAB: NETWORK (IP only) ── #}
+      {% if ioc.type.value == 'ip' %}
+      <div class="tab-panel active" id="tab-network">
+        {% set sh  = sources.get('shodan', {}) %}
+        {% set vt  = sources.get('virustotal', {}) %}
+        {% set ab  = sources.get('abuseipdb', {}) %}
+        {% set gn  = sources.get('greynoise', {}) %}
+        {% set cip = sources.get('criminalip', {}) %}
+        <table class="info-table">
+          <tr><td>IP</td><td>{{ ioc.value }}</td></tr>
+          {% if sh.get('hostnames') %}
+          <tr><td>PTR / rDNS</td><td>{{ sh.hostnames | join(', ') }}</td></tr>
+          {% endif %}
+          {% if metadata.get('asn') %}
+          <tr><td>ASN</td><td>{{ metadata.asn }}</td></tr>
+          {% endif %}
+          {% if metadata.get('org') %}
+          <tr><td>Organization</td><td>{{ metadata.org }}</td></tr>
+          {% endif %}
+          {% if metadata.get('isp') %}
+          <tr><td>ISP</td><td>{{ metadata.isp }}</td></tr>
+          {% endif %}
+          {% if metadata.get('network') %}
+          <tr><td>Network</td><td>{{ metadata.network }}</td></tr>
+          {% endif %}
+          {% if metadata.get('country') %}
+          <tr><td>Country</td><td>{{ metadata.country }}</td></tr>
+          {% endif %}
+          {% if metadata.get('city') %}
+          <tr><td>City</td><td>{{ metadata.city }}</td></tr>
+          {% endif %}
+          {% if ab.get('usage_type') %}
+          <tr><td>Usage Type</td><td>{{ ab.usage_type }}</td></tr>
+          {% endif %}
+          {% if cip.get('is_tor') or ab.get('is_tor') %}
+          <tr><td>Tor Exit Node</td><td style="color:var(--v-malicious)">Yes</td></tr>
+          {% endif %}
+          {% if cip.get('is_vpn') %}
+          <tr><td>VPN / Proxy</td><td style="color:var(--v-suspicious)">Detected</td></tr>
+          {% endif %}
+          {% if gn.get('is_noise') %}
+          <tr><td>GreyNoise</td><td style="color:var(--text3)">Known scanner / noise</td></tr>
+          {% endif %}
+        </table>
+      </div>
+
+      {# ── TAB: PORTS (IP only) ── #}
+      <div class="tab-panel" id="tab-ports">
+        {% set sh = sources.get('shodan', {}) %}
+        {% if sh.get('status') == 'ok' and sh.get('ports') %}
+        <table class="port-table">
+          <thead>
+            <tr><th>Port</th><th>Protocol</th><th>Service / Banner</th></tr>
+          </thead>
+          <tbody>
+            {% for port in sh.ports %}
+            <tr>
+              <td class="{% if port in [4444,8080,8888,1337,31337] %}port-warn{% endif %}">
+                {{ port }}
+              </td>
+              <td>TCP</td>
+              <td>
+                {% set tech_list = sh.get('technologies', []) %}
+                {{ tech_list[loop.index0] if loop.index0 < tech_list|length else '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p style="font-size:10px;color:var(--text3);margin-top:8px">
+          Source: Shodan ·
+          {% if sh.get('last_seen') %}Last updated {{ sh.last_seen[:10] }}{% endif %}
+        </p>
+        {% else %}
+        <p style="font-size:11px;color:var(--text3)">
+          {% if sources.get('shodan', {}).get('status') == 'no_key' %}
+          Shodan API key not configured.
+          {% else %}
+          No open ports found or Shodan data unavailable.
+          {% endif %}
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── TAB: WHOIS ── #}
+      <div class="tab-panel {% if ioc.type.value not in ['ip'] %}active{% endif %}" id="tab-whois">
+        {% set st = sources.get('securitytrails', {}) %}
+        {% if st.get('status') == 'ok' %}
+        <table class="info-table">
+          {% if st.get('registrar') %}
+          <tr><td>Registrar</td><td>{{ st.registrar }}</td></tr>
+          {% endif %}
+          {% if st.get('creation_date') %}
+          <tr><td>Created</td><td>{{ st.creation_date }}</td></tr>
+          {% endif %}
+          {% if st.get('expiry_date') %}
+          <tr><td>Expires</td><td>{{ st.expiry_date }}</td></tr>
+          {% endif %}
+          {% if st.get('hostnames') %}
+          <tr><td>Resolves to</td><td>{{ st.hostnames | join(', ') }}</td></tr>
+          {% endif %}
+        </table>
+        {% else %}
+        <p style="font-size:11px;color:var(--text3)">
+          {% if st.get('status') == 'no_key' %}SecurityTrails API key not configured.
+          {% else %}WHOIS data unavailable.{% endif %}
+        </p>
+        {% endif %}
+      </div>
+
+      {# ── TAB: DNS ── #}
+      {% if ioc.type.value in ['domain','url','email'] %}
+      <div class="tab-panel" id="tab-dns">
+        {% set st = sources.get('securitytrails', {}) %}
+        {% if st.get('dns_records') %}
+        {% for record_type, records in st.dns_records.items() %}
+        <div style="margin-bottom:12px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.12em;
+                      text-transform:uppercase;color:var(--text3);margin-bottom:5px">
+            {{ record_type }} Records
+          </div>
+          {% for rec in (records.get('values') or [])[:8] %}
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);
+                      padding:3px 8px;background:var(--bg3);border-radius:4px;margin-bottom:3px">
+            {{ rec.get('ip') or rec.get('value') or rec | string }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="font-size:11px;color:var(--text3)">DNS records unavailable.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── TAB: SCREENSHOT ── #}
+      {% if ioc.type.value in ['domain','url'] %}
+      <div class="tab-panel" id="tab-screenshot">
+        {% set us = sources.get('urlscan', {}) %}
+        {% if us.get('screenshot_url') %}
+        <div class="screenshot-frame">
+          <img src="{{ us.screenshot_url }}" alt="Screenshot of {{ ioc.value }}"
+               loading="lazy" onerror="this.parentElement.innerHTML='<p style=\'padding:16px;font-size:11px;color:var(--text3)\'>Screenshot unavailable.</p>'">
+        </div>
+        {% if us.get('http_status') %}
+        <p style="font-size:10px;color:var(--text3);margin-top:6px">
+          HTTP {{ us.http_status }} ·
+          {% if us.get('technologies') %}
+          Technologies: {{ us.technologies | join(', ') }}
+          {% endif %}
+        </p>
+        {% endif %}
+        {% else %}
+        <p style="font-size:11px;color:var(--text3)">
+          {% if us.get('status') == 'no_key' %}URLScan.io API key not configured.
+          {% else %}No screenshot available for this indicator.{% endif %}
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── TAB: FILE INFO (hash only) ── #}
+      {% if ioc.type.value == 'hash' %}
+      <div class="tab-panel active" id="tab-file">
+        {% set vt = sources.get('virustotal', {}) %}
+        {% set mb = sources.get('malwarebazaar', {}) %}
+        <table class="info-table">
+          {% if vt.get('file_name') or mb.get('file_name') %}
+          <tr><td>File Name</td><td>{{ vt.get('file_name') or mb.get('file_name') }}</td></tr>
+          {% endif %}
+          {% if vt.get('file_type') or mb.get('file_type') %}
+          <tr><td>File Type</td><td>{{ vt.get('file_type') or mb.get('file_type') }}</td></tr>
+          {% endif %}
+          {% if vt.get('file_size') or mb.get('file_size') %}
+          <tr><td>File Size</td><td>{{ vt.get('file_size') or mb.get('file_size') }} bytes</td></tr>
+          {% endif %}
+          {% if vt.get('malware_family') or mb.get('malware_family') %}
+          <tr>
+            <td>Malware Family</td>
+            <td style="color:var(--v-malicious)">{{ vt.get('malware_family') or mb.get('malware_family') }}</td>
+          </tr>
+          {% endif %}
+          {% if vt.get('first_submission') or mb.get('first_submission') %}
+          <tr><td>First Seen</td><td>{{ vt.get('first_submission') or mb.get('first_submission') }}</td></tr>
+          {% endif %}
+          <tr><td>Hash</td><td>{{ ioc.value }}</td></tr>
+        </table>
+        {% if mb.get('status') == 'ok' %}
+        <p style="font-size:10px;color:var(--v-malicious);margin-top:8px">
+          ⚠ Found in MalwareBazaar — confirmed malware sample
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── TAB: EMAIL OSINT ── #}
+      {% if ioc.type.value == 'email' %}
+      <div class="tab-panel active" id="tab-email">
+        {% set wmn = sources.get('whatsmyname', {}) %}
+        {% set sfs = sources.get('stopforumspam', {}) %}
+        {% if sfs.get('status') == 'ok' %}
+        <div style="margin-bottom:12px">
+          <div class="section-card-title" style="margin-bottom:8px">StopForumSpam</div>
+          <table class="info-table">
+            <tr><td>Reports</td><td>{{ sfs.get('email_reports', 0) }}</td></tr>
+            <tr>
+              <td>Status</td>
+              <td style="color:var(--v-{{ sfs.get('verdict_hint','unknown') }})">
+                {{ sfs.get('verdict_hint', 'unknown').capitalize() }}
+              </td>
+            </tr>
+          </table>
+        </div>
+        {% endif %}
+        {% if wmn.get('username_hits') %}
+        <div class="divider"></div>
+        <div class="section-card-title" style="margin-bottom:8px">
+          WhatsMyName — {{ wmn.username_hits | length }} platform(s) found
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          {% for hit in wmn.username_hits %}
+          <a href="{{ hit.url }}" target="_blank" rel="noopener" class="source-pill ok">
+            {{ hit.site }}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>{# end section-card tech info #}
+
+  </div>{# end results-main #}
+
+  {# ══ RIGHT SIDEBAR ══ #}
+  <div class="results-side">
+
+    {# ══ SECTION 3: SOURCES ══ #}
+    <div class="section-card anim-fade-up anim-delay-2">
+      <div class="section-card-title">③ Intelligence Sources</div>
+
+      {% set source_meta = [
+        ('virustotal',    'VirusTotal',   'https://www.virustotal.com/gui/search/'),
+        ('abuseipdb',     'AbuseIPDB',    'https://www.abuseipdb.com/check/'),
+        ('greynoise',     'GreyNoise',    'https://viz.greynoise.io/ip/'),
+        ('shodan',        'Shodan',       'https://www.shodan.io/host/'),
+        ('pulsedive',     'Pulsedive',    'https://pulsedive.com/indicator/?ioc='),
+        ('criminalip',    'Criminal IP',  'https://www.criminalip.io/ip-detail?ip='),
+        ('malwarebazaar', 'MalwareBazaar','https://bazaar.abuse.ch/sample/'),
+        ('urlscan',       'URLScan.io',   'https://urlscan.io/search/#'),
+        ('securitytrails','SecurityTrails','https://securitytrails.com/domain/'),
+        ('stopforumspam', 'StopForumSpam','https://www.stopforumspam.com/search?q='),
+      ] %}
+
+      {% for src_key, src_label, base_url in source_meta %}
+        {% set src = sources.get(src_key, {}) %}
+        {% set status = src.get('status', 'skipped') %}
+        {% set hint = src.get('verdict_hint', 'unknown') %}
+        {% set dot_color = 'var(--v-' ~ hint ~ ')' if status == 'ok' else 'var(--border2)' %}
+        <div class="source-row {{ 'no-key' if status == 'no_key' else '' }} {{ 'error' if status == 'error' else '' }}">
+          <span class="source-dot" style="background:{{ dot_color }}"></span>
+          <span class="source-name">{{ src_label }}</span>
+          <span class="source-summary">
+            {% if status == 'ok' %}
+              {% if src_key == 'virustotal' %}{{ src.get('malicious_count',0) }}/{{ src.get('total_engines',0) }} engines
+              {% elif src_key == 'abuseipdb' %}{{ src.get('abuse_score',0) }}% abuse
+              {% elif src_key == 'greynoise' %}{{ src.get('classification','—') }}
+              {% elif src_key == 'shodan' %}{{ (src.get('ports') or []) | length }} ports
+              {% elif src_key == 'pulsedive' %}{{ src.get('pulse_count',0) }} pulses
+              {% elif src_key == 'malwarebazaar' %}{{ src.get('malware_family') or 'Found' if src.get('file_name') else 'Not found' }}
+              {% elif src_key == 'stopforumspam' %}{{ src.get('email_reports',0) }} reports
+              {% elif src_key == 'urlscan' %}{{ 'Screenshot' if src.get('screenshot_url') else 'Scanned' }}
+              {% else %}{{ hint.capitalize() }}{% endif %}
+            {% elif status == 'no_key' %}No key configured
+            {% elif status == 'skipped' %}N/A for {{ ioc.type.value }}
+            {% elif status == 'error' %}Error — {{ src.get('error','') | truncate(30) }}
+            {% elif status == 'timeout' %}Timeout
+            {% else %}—{% endif %}
+          </span>
+          {% if status == 'ok' %}
+          <a class="source-link" href="{{ base_url }}{{ ioc.value }}" target="_blank" rel="noopener">↗</a>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    {# ══ SECTION 4: GEOLOCATION (IP only) ══ #}
+    {% if ioc.type.value == 'ip' and geo %}
+    <div class="section-card anim-fade-up anim-delay-3">
+      <div class="section-card-title">④ Geolocation</div>
+      <div id="geo-map"></div>
+      <div class="divider"></div>
+      <table class="info-table" style="margin-top:0">
+        {% if geo.get('country') %}<tr><td>Country</td><td>{{ geo.country }}</td></tr>{% endif %}
+        {% if geo.get('city')    %}<tr><td>City</td><td>{{ geo.city }}</td></tr>{% endif %}
+        {% if geo.get('org')     %}<tr><td>Org</td><td>{{ geo.org }}</td></tr>{% endif %}
+        {% if geo.get('asn')     %}<tr><td>ASN</td><td>{{ geo.asn }}</td></tr>{% endif %}
+        {% if geo.get('isp')     %}<tr><td>ISP</td><td>{{ geo.isp }}</td></tr>{% endif %}
+        {% if geo.get('network') %}<tr><td>Network</td><td>{{ geo.network }}</td></tr>{% endif %}
+      </table>
+    </div>
+    {% endif %}
+
+    {# ── Scan history ── #}
+    {% if history | length > 1 %}
+    <div class="section-card anim-fade-up anim-delay-4">
+      <div class="section-card-title">Scan History</div>
+      {% for h in history[:6] %}
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:11px">
+        <span class="badge badge-{{ h.verdict.value if h.verdict else 'unknown' }}" style="font-size:8px">
+          {{ h.verdict.value if h.verdict else '?' }}
+        </span>
+        <span class="mono" style="color:var(--text2)">{{ h.score }}/100</span>
+        <span style="flex:1;color:var(--text3);font-size:10px">{{ h.scanned_at.strftime('%Y-%m-%d %H:%M') if h.scanned_at else '' }}</span>
+        <span style="font-size:9px;color:var(--text3)">{{ h.triggered_by.value if h.triggered_by else '' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>{# end results-side #}
+  </div>{# end results-grid #}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/app.js"></script>
+<script>
+// ── Tab switching ──────────────────────────────────────────────────────
+function switchTab(panelId, btn) {
+  const card = btn.closest('.section-card');
+  card.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  card.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const panel = document.getElementById(panelId);
+  if (panel) panel.classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Copy to clipboard ─────────────────────────────────────────────────
+function copyToClipboard(text) {
+  navigator.clipboard?.writeText(text).then(() => {
+    const btn = document.querySelector('[onclick*="copyToClipboard"]');
+    if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = orig, 1500); }
+  });
+}
+
+// ── Geo map (Leaflet) ─────────────────────────────────────────────────
+{% if ioc.type.value == 'ip' and geo %}
+(function() {
+  const mapEl = document.getElementById('geo-map');
+  if (!mapEl) return;
+  const script = document.createElement('script');
+  script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  script.onload = () => {
+    // Use ip-api.com free endpoint for coords (no key needed)
+    fetch('https://ip-api.com/json/{{ ioc.value }}?fields=lat,lon,status')
+      .then(r => r.json())
+      .then(d => {
+        if (d.status !== 'success') { mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px">Location unavailable</div>'; return; }
+        const isDark = document.body.classList.contains('dark');
+        const tileUrl = isDark
+          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+        const map = L.map('geo-map', { zoomControl:false, attributionControl:false }).setView([d.lat, d.lon], 8);
+        L.tileLayer(tileUrl, { maxZoom:18 }).addTo(map);
+        const icon = L.divIcon({ className:'', html:`<div style="width:12px;height:12px;background:var(--accent);border-radius:50%;border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 8px var(--accent-glow)"></div>`, iconSize:[12,12], iconAnchor:[6,6] });
+        L.marker([d.lat, d.lon], {icon}).addTo(map);
+      })
+      .catch(() => { mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px">Map unavailable</div>'; });
+  };
+  document.head.appendChild(script);
+})();
+{% endif %}
+</script>
+<script src="/static/js/graph.js"></script>
+{% endblock %}

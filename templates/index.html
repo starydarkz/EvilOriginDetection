@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Evil Origin Detection — Threat Intelligence Correlation{% endblock %}
+
+{% block content %}
+<div class="page-center">
+
+  <!-- HERO LOGO -->
+  <div class="anim-fade-up" style="display:flex;flex-direction:column;align-items:center;margin-bottom:24px">
+    <svg viewBox="0 0 88 88" fill="none" style="width:86px;height:86px;margin-bottom:14px;filter:drop-shadow(0 0 20px var(--accent-glow))">
+      <circle cx="44" cy="48" r="36" stroke="var(--accent)" stroke-width="0.5" stroke-dasharray="2 3" opacity="0.35"/>
+      <!-- Horns -->
+      <path fill="var(--accent)" opacity="0.9"
+        d="M27 32 C24 26,20 22,18 14 C17 10,19 6,22 8 C24 10,23 14,24 18 C26 22,28 26,29 30Z"/>
+      <path d="M22 8 C23 12,23 16,24 20" stroke="rgba(0,0,8,0.4)" stroke-width="0.8" fill="none"/>
+      <path fill="var(--accent)" opacity="0.9"
+        d="M61 32 C64 26,68 22,70 14 C71 10,69 6,66 8 C64 10,65 14,64 18 C62 22,60 26,59 30Z"/>
+      <path d="M66 8 C65 12,65 16,64 20" stroke="rgba(0,0,8,0.4)" stroke-width="0.8" fill="none"/>
+      <path fill="var(--accent)" d="M21 40 C16 36,12 32,14 28 C16 30,18 34,21 38Z" opacity="0.65"/>
+      <path fill="var(--accent)" d="M67 40 C72 36,76 32,74 28 C72 30,70 34,67 38Z" opacity="0.65"/>
+      <!-- Face -->
+      <path d="M16 50 C16 36,22 28,28 30 C32 24,38 22,44 22 C50 22,56 24,60 30 C66 28,72 36,72 50 C72 62,64 72,44 74 C24 72,16 62,16 50Z"
+            fill="var(--accent)" opacity="0.04"/>
+      <!-- Eye socket -->
+      <ellipse cx="44" cy="48" rx="22" ry="14" fill="rgba(0,0,8,0.5)"/>
+      <!-- Eye whites -->
+      <path d="M22 48 C28 38,38 34,44 34 C50 34,60 38,66 48 C60 58,50 62,44 62 C38 62,28 58,22 48Z"
+            stroke="var(--accent)" stroke-width="1.2" fill="rgba(224,92,92,0.05)"/>
+      <!-- Iris -->
+      <circle cx="44" cy="48" r="10" stroke="var(--accent)" stroke-width="1.2" fill="rgba(224,92,92,0.1)"/>
+      <line x1="44" y1="38" x2="44" y2="42" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
+      <line x1="44" y1="54" x2="44" y2="58" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
+      <line x1="34" y1="48" x2="38" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
+      <line x1="50" y1="48" x2="54" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
+      <!-- Slit pupil -->
+      <ellipse cx="44" cy="48" rx="3" ry="7" fill="var(--accent)"
+               style="animation: pupil-pulse 2.8s ease-in-out infinite"/>
+      <ellipse cx="42" cy="45" rx="1" ry="1.5" fill="rgba(255,255,255,0.22)"/>
+      <!-- Brow ridges -->
+      <path d="M22 40 C28 34,36 32,44 33" stroke="var(--accent)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <path d="M66 40 C60 34,52 32,44 33" stroke="var(--accent)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <!-- Jaw -->
+      <path d="M32 64 C36 70,42 72,44 72 C46 72,52 70,56 64"
+            stroke="var(--accent)" stroke-width="0.8" fill="none" stroke-linecap="round" opacity="0.25"/>
+      <!-- Teeth -->
+      <path d="M38 68 L39 72 M44 69 L44 73 M50 68 L49 72"
+            stroke="var(--accent)" stroke-width="0.7" stroke-linecap="round" opacity="0.3"/>
+      <!-- Crosshair -->
+      <line x1="44" y1="10" x2="44" y2="22" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
+      <line x1="44" y1="74" x2="44" y2="82" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
+      <line x1="10" y1="48" x2="20" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
+      <line x1="68" y1="48" x2="78" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
+    </svg>
+
+    <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;letter-spacing:-0.03em;text-align:center;line-height:1">
+      <span style="color:var(--accent)">Evil</span> Origin Detection
+    </h1>
+    <p style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text3);margin-top:5px">
+      Threat Intelligence Correlation Platform
+    </p>
+  </div>
+
+  <!-- DESCRIPTION -->
+  <div class="anim-fade-up anim-delay-1 surface" style="max-width:520px;width:100%;padding:14px 20px;margin-bottom:24px;text-align:center;border-radius:10px">
+    <p style="font-size:12px;line-height:1.75;color:var(--text2)">
+      Correlate Indicators of Compromise across
+      <strong style="color:var(--text);font-weight:600">10 threat intelligence sources</strong>
+      to uncover the malicious origins of IPs, domains, hashes, URLs and emails.
+    </p>
+  </div>
+
+  <!-- STATS -->
+  <div class="anim-fade-up anim-delay-2" style="display:flex;gap:28px;margin-bottom:28px">
+    <div class="stat-box" style="text-align:center;padding:10px 18px">
+      <div class="stat-num">10</div>
+      <div class="stat-lbl">Sources</div>
+    </div>
+    <div class="stat-box" style="text-align:center;padding:10px 18px">
+      <div class="stat-num">5</div>
+      <div class="stat-lbl">IOC Types</div>
+    </div>
+    <div class="stat-box" style="text-align:center;padding:10px 18px">
+      <div class="stat-num">24h</div>
+      <div class="stat-lbl">Cache TTL</div>
+    </div>
+  </div>
+
+  <!-- SEARCH FORM -->
+  <form method="POST" action="/analyze" class="anim-fade-up anim-delay-3 surface"
+        style="width:100%;max-width:580px;padding:20px;border-radius:12px">
+
+    {% if error %}
+    <div style="color:var(--danger);font-family:'JetBrains Mono',monospace;font-size:11px;
+                margin-bottom:10px;padding:8px 12px;border-radius:6px;
+                background:rgba(224,92,92,0.08);border:0.5px solid rgba(224,92,92,0.25)">
+      ⚠ {{ error }}
+    </div>
+    {% endif %}
+
+    <label style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.14em;
+                  text-transform:uppercase;color:var(--text3);display:block;margin-bottom:8px">
+      Indicator of Compromise
+    </label>
+
+    <textarea name="ioc_input" id="ioc-input" class="ioc-textarea" rows="4"
+      placeholder="ip=185.220.101.47&#10;domain=evil-update.net&#10;hash=d41d8cd98f00b204e9800998ecf8427e&#10;url=https://malicious.site/payload"
+      oninput="updateCounter(this)"
+    ></textarea>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:10px">
+      <span id="ioc-counter" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">
+        0 indicators detected
+      </span>
+      <button type="submit" class="btn btn-primary">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Analyze
+      </button>
+    </div>
+
+    <!-- Type chips -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('ip=')">ip=</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('domain=')">domain=</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('hash=')">hash=</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('url=')">url=</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('mail=')">mail=</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('red=')">red=</button>
+    </div>
+  </form>
+
+  <!-- HELP COLLAPSIBLE -->
+  <div class="anim-fade-up anim-delay-4" style="width:100%;max-width:580px;margin-top:10px">
+    <button class="collapse-toggle" onclick="toggleHelp()">
+      <span>⊙ Syntax reference &amp; examples</span>
+      <span class="collapse-chevron" id="help-chev">▶</span>
+    </button>
+    <div class="collapse-body" id="help-body">
+      <div class="surface" style="padding:16px;border-radius:8px;margin-top:2px">
+
+        <div class="section-label">Input formats</div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px">
+          {% for prefix, example, desc in [
+            ('ip=',     'ip=185.220.101.47',                    'IPv4 or IPv6 address'),
+            ('red=',    'red=192.168.0.0/24',                   'CIDR network range'),
+            ('domain=', 'domain=malicious-cdn.net',             'Domain or subdomain'),
+            ('hash=',   'hash=d41d8cd98f00b204e9800998ecf8427e','MD5 / SHA1 / SHA256 / SHA512'),
+            ('url=',    'url=https://evil.com/payload.exe',     'Full URL (http/https)'),
+            ('mail=',   'mail=phish@spoofed-domain.com',        'Email address'),
+          ] %}
+          <div style="display:flex;align-items:baseline;gap:10px;font-size:12px">
+            <code onclick="fillExample('{{ example }}')"
+                  style="font-family:'JetBrains Mono',monospace;font-size:11px;
+                         padding:2px 8px;border-radius:4px;cursor:pointer;
+                         background:var(--bg3);border:0.5px solid var(--border);
+                         color:var(--blue);transition:opacity 0.15s"
+                  onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">
+              {{ example[:40] }}{% if example|length > 40 %}…{% endif %}
+            </code>
+            <span style="color:var(--text3)">{{ desc }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-label">Active intelligence sources</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          {% for src in ['VirusTotal','AbuseIPDB','GreyNoise','Shodan','Pulsedive',
+                         'Criminal IP','MalwareBazaar','URLScan.io','SecurityTrails',
+                         'StopForumSpam'] %}
+          <span class="source-pill ok">{{ src }}</span>
+          {% endfor %}
+        </div>
+
+        <div class="divider"></div>
+        <p style="font-size:11px;line-height:1.7;color:var(--text2)">
+          One indicator per line. Results cached for
+          <span class="mono" style="color:var(--text)">24h</span> —
+          use <span class="mono" style="color:var(--text)">Rescan</span> on the results page to force refresh.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/app.js"></script>
+{% endblock %}

@@ -1,0 +1,69 @@
+# render.yaml — Evil Origin Detection deployment config for Render.com
+# Docs: https://render.com/docs/yaml-spec
+#
+# Deploy: connect your GitHub repo in Render Dashboard,
+# it will detect this file automatically.
+
+services:
+  - type: web
+    name: evil-origin-detection
+    runtime: python
+    plan: free
+
+    # Build
+    buildCommand: pip install -r requirements.txt
+
+    # Start — 1 worker on free tier (512MB RAM)
+    startCommand: gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 1 --bind 0.0.0.0:$PORT --timeout 120 --keep-alive 5
+
+    # Health check
+    healthCheckPath: /
+
+    # Auto-deploy on push to main branch
+    autoDeploy: true
+
+    # Environment variables
+    # Set the actual values in Render Dashboard → Environment
+    # (never commit real keys to git)
+    envVars:
+      - key: CACHE_TTL_HOURS
+        value: "24"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: DB_PATH
+        value: "/tmp/eod.db"
+      - key: LOG_PATH
+        value: "/tmp/eod.log"
+      # API keys — set values in Render Dashboard, not here
+      - key: VT_KEY_1
+        sync: false
+      - key: VT_KEY_2
+        sync: false
+      - key: ABUSEIPDB_KEY_1
+        sync: false
+      - key: ABUSEIPDB_KEY_2
+        sync: false
+      - key: GREYNOISE_KEY_1
+        sync: false
+      - key: GREYNOISE_KEY_2
+        sync: false
+      - key: SHODAN_KEY_1
+        sync: false
+      - key: SHODAN_KEY_2
+        sync: false
+      - key: PULSEDIVE_KEY_1
+        sync: false
+      - key: PULSEDIVE_KEY_2
+        sync: false
+      - key: CRIMINALIP_KEY_1
+        sync: false
+      - key: CRIMINALIP_KEY_2
+        sync: false
+      - key: URLSCAN_KEY_1
+        sync: false
+      - key: URLSCAN_KEY_2
+        sync: false
+      - key: SECURITYTRAILS_KEY_1
+        sync: false
+      - key: SECURITYTRAILS_KEY_2
+        sync: false
