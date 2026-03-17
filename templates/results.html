@@ -316,7 +316,7 @@
         <table class="info-table">
           <tr><td>IP</td><td>{{ ioc.value }}</td></tr>
           {% if sh.get('hostnames') %}
-          <tr><td>PTR / rDNS</td><td>{{ sh.hostnames | join(', ') }}</td></tr>
+          <tr><td>PTR / rDNS</td><td>{{ sh.get('hostnames', []) | join(', ') }}</td></tr>
           {% endif %}
           {% if metadata.get('asn') %}
           <tr><td>ASN</td><td>{{ metadata.asn }}</td></tr>
@@ -353,37 +353,49 @@
 
       {# ── TAB: PORTS (IP only) ── #}
       <div class="tab-panel" id="tab-ports">
-        {% set sh = sources.get('shodan', {}) %}
-        {% if sh.get('status') == 'ok' and sh.get('ports') %}
+        {% set sh  = sources.get('shodan', {}) %}
+        {% set cip = sources.get('criminalip', {}) %}
+        {% set port_list = sh.get('ports') or cip.get('ports') or [] %}
+        {% set port_source = 'Shodan' if sh.get('ports') else 'Criminal IP' %}
+        {% if port_list %}
         <table class="port-table">
           <thead>
-            <tr><th>Port</th><th>Protocol</th><th>Service / Banner</th></tr>
+            <tr><th>Port</th><th>Protocol</th><th>Flag</th></tr>
           </thead>
           <tbody>
-            {% for port in sh.ports %}
+            {% for port in port_list %}
             <tr>
-              <td class="{% if port in [4444,8080,8888,1337,31337] %}port-warn{% endif %}">
+              <td class="{% if port in [4444,8080,8888,1337,31337,9001,6667] %}port-warn{% endif %}">
                 {{ port }}
               </td>
               <td>TCP</td>
               <td>
-                {% set tech_list = sh.get('technologies', []) %}
-                {{ tech_list[loop.index0] if loop.index0 < tech_list|length else '—' }}
+                {% if port in [22] %}SSH
+                {% elif port in [80] %}HTTP
+                {% elif port in [443] %}HTTPS
+                {% elif port in [21] %}FTP
+                {% elif port in [25,587,465] %}SMTP
+                {% elif port in [3306] %}MySQL
+                {% elif port in [6379] %}Redis
+                {% elif port in [27017] %}MongoDB
+                {% elif port in [9200,9300] %}Elasticsearch
+                {% elif port in [4444,8080,8888,1337,31337] %}⚠ Suspicious
+                {% else %}—{% endif %}
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
         <p style="font-size:10px;color:var(--text3);margin-top:8px">
-          Source: Shodan ·
-          {% if sh.get('last_seen') %}Last updated {{ sh.last_seen[:10] }}{% endif %}
+          Source: {{ port_source }} ·
+          {% if sh.get('last_seen') %}Last indexed {{ sh.last_seen[:10] }}{% endif %}
         </p>
         {% else %}
         <p style="font-size:11px;color:var(--text3)">
-          {% if sources.get('shodan', {}).get('status') == 'no_key' %}
-          Shodan API key not configured.
+          {% if sources.get('shodan', {}).get('status') == 'no_key' and sources.get('criminalip', {}).get('status') == 'no_key' %}
+          Shodan and Criminal IP keys not configured.
           {% else %}
-          No open ports found or Shodan data unavailable.
+          No open ports found in threat intelligence data.
           {% endif %}
         </p>
         {% endif %}
@@ -548,19 +560,19 @@
       <div class="section-card-title">③ Intelligence Sources</div>
 
       {% set source_meta = [
-        ('virustotal',    'VirusTotal',   'https://www.virustotal.com/gui/search/'),
-        ('abuseipdb',     'AbuseIPDB',    'https://www.abuseipdb.com/check/'),
-        ('greynoise',     'GreyNoise',    'https://viz.greynoise.io/ip/'),
-        ('shodan',        'Shodan',       'https://www.shodan.io/host/'),
-        ('pulsedive',     'Pulsedive',    'https://pulsedive.com/indicator/?ioc='),
-        ('criminalip',    'Criminal IP',  'https://www.criminalip.io/ip-detail?ip='),
-        ('malwarebazaar', 'MalwareBazaar','https://bazaar.abuse.ch/sample/'),
-        ('urlscan',       'URLScan.io',   'https://urlscan.io/search/#'),
-        ('securitytrails','SecurityTrails','https://securitytrails.com/domain/'),
-        ('stopforumspam', 'StopForumSpam','https://www.stopforumspam.com/search?q='),
+        ('virustotal',    'VirusTotal'),
+        ('abuseipdb',     'AbuseIPDB'),
+        ('greynoise',     'GreyNoise'),
+        ('shodan',        'Shodan'),
+        ('pulsedive',     'Pulsedive'),
+        ('criminalip',    'Criminal IP'),
+        ('malwarebazaar', 'MalwareBazaar'),
+        ('urlscan',       'URLScan.io'),
+        ('securitytrails','SecurityTrails'),
+        ('stopforumspam', 'StopForumSpam'),
       ] %}
 
-      {% for src_key, src_label, base_url in source_meta %}
+      {% for src_key, src_label in source_meta %}
         {% set src = sources.get(src_key, {}) %}
         {% set status = src.get('status', 'skipped') %}
         {% set hint = src.get('verdict_hint') or 'unknown' %}
@@ -573,8 +585,13 @@
               {% if src_key == 'virustotal' %}{{ src.get('malicious_count',0) }}/{{ src.get('total_engines',0) }} engines
               {% elif src_key == 'abuseipdb' %}{{ src.get('abuse_score',0) }}% abuse
               {% elif src_key == 'greynoise' %}{{ src.get('classification','—') }}
-              {% elif src_key == 'shodan' %}{{ (src.get('ports') or []) | length }} ports
-              {% elif src_key == 'pulsedive' %}{{ src.get('pulse_count',0) }} pulses
+              {% elif src_key == 'shodan' %}{{ (src.get('ports') or []) | length }} open ports
+              {% elif src_key == 'pulsedive' %}
+                {{ src.get('pulse_count',0) }} feeds
+                {% if src.get('country') %} · {{ src.get('country') }}{% endif %}
+                {% if src.get('org') %} · {{ src.get('org') }}{% endif %}
+              {% elif src_key == 'criminalip' %}
+                {% if src.get('abuse_score') is not none %}Score {{ src.get('abuse_score') }}{% else %}{{ (hint or 'unknown') | capitalize }}{% endif %}
               {% elif src_key == 'malwarebazaar' %}{{ src.get('malware_family') or 'Found' if src.get('file_name') else 'Not found' }}
               {% elif src_key == 'stopforumspam' %}{{ src.get('email_reports',0) }} reports
               {% elif src_key == 'urlscan' %}{{ 'Screenshot' if src.get('screenshot_url') else 'Scanned' }}
@@ -585,8 +602,9 @@
             {% elif status == 'timeout' %}Timeout
             {% else %}—{% endif %}
           </span>
-          {% if status == 'ok' %}
-          <a class="source-link" href="{{ base_url }}{{ ioc.value }}" target="_blank" rel="noopener">↗</a>
+          {% if status == 'ok' and source_links %}
+          <a class="source-link" href="{{ source_links.get(src_key, '#') }}"
+             target="_blank" rel="noopener">↗</a>
           {% endif %}
         </div>
       {% endfor %}
