@@ -1,11 +1,14 @@
 """
 urlscan.py — URLScan.io connector.
 Supports: URL, Domain
+Docs: https://urlscan.io/docs/api/
 
 Strategy:
-1. Search existing scans first (free, fast)
-2. If none found AND we have a key → submit a new scan, poll for result
-3. Screenshots are public once the scan completes
+1. Search existing scans (fast, no quota)
+2. If none found + key available → submit new scan, wait 15s, fetch result
+3. Screenshot URL: constructed from uuid (always valid for public scans)
+
+Timeout override: 35s to allow for new scan submission + wait
 """
 import asyncio
 from app.models import IOCType
@@ -20,9 +23,9 @@ RESULT = "https://urlscan.io/api/v1/result"
 class URLScanConnector(BaseConnector):
     SOURCE_NAME     = "urlscan"
     SUPPORTED_TYPES = {IOCType.url, IOCType.domain}
+    TIMEOUT         = 35.0  # override base 12s — new scans take ~15s to complete
 
     async def _fetch(self, ioc: ParsedIOC) -> dict:
-        # Build search query
         if ioc.type == IOCType.url:
             query = f'page.url:"{ioc.value}"'
         else:
@@ -32,7 +35,12 @@ class URLScanConnector(BaseConnector):
         if self.api_key:
             headers["API-Key"] = self.api_key
 
-        async with self._client(headers) as c:
+        import httpx
+        async with httpx.AsyncClient(
+            timeout=self.TIMEOUT,
+            follow_redirects=True,
+            headers=headers,
+        ) as c:
 
             # ── Step 1: Search existing scans ──────────────────────
             r = await c.get(
@@ -56,41 +64,52 @@ class URLScanConnector(BaseConnector):
                     ioc.value if ioc.type == IOCType.url
                     else f"https://{ioc.value}"
                 )
-                submit_r = await c.post(
-                    SUBMIT,
-                    json={"url": url_to_scan, "visibility": "public"},
-                    headers={"API-Key": self.api_key,
-                             "Content-Type": "application/json"},
-                )
-                if submit_r.status_code == 200:
-                    scan_uuid = submit_r.json().get("uuid")
-                    if scan_uuid:
-                        # Poll for result — URLScan takes ~10s to complete
-                        await asyncio.sleep(12)
-                        result_r = await c.get(f"{RESULT}/{scan_uuid}/")
-                        if result_r.status_code == 200:
-                            detail = result_r.json()
-                            # Build a fake "results" structure from the scan
-                            data["results"] = [{
-                                "task": {
-                                    "uuid":          scan_uuid,
-                                    "url":           url_to_scan,
-                                    "time":          detail.get("task", {}).get("time"),
-                                    "screenshotURL": detail.get("task", {}).get("screenshotURL"),
-                                },
-                                "page": detail.get("page", {}),
-                                "verdicts": detail.get("verdicts", {}),
-                            }]
-                            data["_detail"] = detail
-                            return data
+                try:
+                    submit_r = await c.post(
+                        SUBMIT,
+                        json={"url": url_to_scan, "visibility": "public"},
+                        headers={
+                            "API-Key":      self.api_key,
+                            "Content-Type": "application/json",
+                        },
+                    )
+                    if submit_r.status_code == 200:
+                        scan_uuid = submit_r.json().get("uuid")
+                        if scan_uuid:
+                            # URLScan needs ~10-15s to complete scan
+                            await asyncio.sleep(15)
+                            result_r = await c.get(f"{RESULT}/{scan_uuid}/")
+                            if result_r.status_code == 200:
+                                detail = result_r.json()
+                                data["results"] = [{
+                                    "task": {
+                                        "uuid": scan_uuid,
+                                        "url":  url_to_scan,
+                                        "time": detail.get("task", {}).get("time"),
+                                        "screenshotURL": detail.get("task", {})
+                                                              .get("screenshotURL"),
+                                    },
+                                    "page":     detail.get("page", {}),
+                                    "verdicts": detail.get("verdicts", {}),
+                                }]
+                                data["_detail"] = detail
+                except Exception:
+                    pass   # new scan is best-effort
 
             # ── Step 3: Fetch detail for existing result ───────────
-            if results:
-                uuid = results[0].get("task", {}).get("uuid")
+            existing_results = data.get("results", [])
+            if existing_results and not data.get("_detail"):
+                uuid = existing_results[0].get("task", {}).get("uuid")
                 if uuid:
-                    r2 = await c.get(f"{RESULT}/{uuid}/")
-                    if r2.status_code == 200:
-                        data["_detail"] = r2.json()
+                    try:
+                        r2 = await c.get(
+                            f"{RESULT}/{uuid}/",
+                            timeout=10.0
+                        )
+                        if r2.status_code == 200:
+                            data["_detail"] = r2.json()
+                    except Exception:
+                        pass   # detail is best-effort
 
             return data
 
@@ -106,23 +125,32 @@ class URLScanConnector(BaseConnector):
         page   = hit.get("page", {})
         detail = raw.get("_detail", {})
 
-        # Screenshot URL — prefer direct field, fallback to constructed URL
+        uuid = task.get("uuid")
+
+        # Screenshot URL — try multiple sources in order of reliability
         result.screenshot_url = (
             task.get("screenshotURL")
             or detail.get("task", {}).get("screenshotURL")
-            or (f"https://urlscan.io/screenshots/{task.get('uuid')}.png"
-                if task.get("uuid") else None)
+            or (f"https://urlscan.io/screenshots/{uuid}.png" if uuid else None)
         )
 
-        result.http_status  = page.get("status") or detail.get("page", {}).get("status")
-        result.country      = page.get("country") or detail.get("page", {}).get("country")
-        result.org          = page.get("asn") or detail.get("page", {}).get("asn")
-        result.last_seen    = task.get("time")
-        result.tags         = (
+        result.http_status = (
+            page.get("status")
+            or detail.get("page", {}).get("status")
+        )
+        result.country = (
+            page.get("country")
+            or detail.get("page", {}).get("country")
+        )
+        result.org      = page.get("asn") or detail.get("page", {}).get("asn")
+        result.last_seen = task.get("time")
+
+        # Tags from verdicts
+        result.tags = (
             hit.get("verdicts", {}).get("urlscan", {}).get("tags", []) or []
         )
 
-        # Technologies from Wappalyzer
+        # Technologies from Wappalyzer in detail
         wappa = (
             detail.get("meta", {})
                   .get("processors", {})
@@ -132,6 +160,19 @@ class URLScanConnector(BaseConnector):
         result.technologies = [
             t.get("app") for t in (wappa or []) if t.get("app")
         ][:10]
+
+        # Redirects — from page data
+        redirects = detail.get("data", {}).get("requests", [])
+        redirect_chain = []
+        for req in (redirects or [])[:5]:
+            resp = req.get("response", {}).get("response", {})
+            status = resp.get("status", 0)
+            if status in (301, 302, 307, 308):
+                loc = resp.get("headers", {}).get("location", "")
+                if loc:
+                    redirect_chain.append(loc)
+        if redirect_chain:
+            result.tags.append(f"redirects:{len(redirect_chain)}")
 
         malicious = (
             hit.get("verdicts", {})

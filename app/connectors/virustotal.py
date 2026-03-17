@@ -131,7 +131,5 @@ class VirusTotalConnector(BaseConnector):
             )
             result.first_submission = attr.get("first_submission_date")
 
-        # Relations → store for graph use
-        relations = raw.get("_relations", {})
-        if relations:
-            result.relations = relations   # stored in raw for graph router
+        # Relations are stored in result.raw (via _fetch) and read
+        # directly by the graph router from raw_json in the DB

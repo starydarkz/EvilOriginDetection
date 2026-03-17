@@ -125,116 +125,177 @@ async def graph_data(
 
     seen_nodes = {ioc.value}
 
+    def add_node(node_id, label, ntype, verdict="unknown", score=None,
+                 extra=None):
+        if label in seen_nodes:
+            return False
+        seen_nodes.add(label)
+        data = {"id": node_id, "label": label, "type": ntype,
+                "verdict": verdict, "score": score}
+        if extra:
+            data.update(extra)
+        nodes.append({"data": data})
+        return True
+
+    def add_edge(source_id, target_id, label, edge_type="default"):
+        edges.append({"data": {
+            "id":     f"e_{source_id}_{target_id}",
+            "source": source_id,
+            "target": target_id,
+            "label":  label,
+            "type":   edge_type,
+        }})
+
+    central_id = f"ioc_{ioc.id}"
+
     for sr in ioc.source_results:
         if sr.status.value != "ok":
             continue
         try:
             norm = json.loads(sr.normalized or "{}")
+            raw  = json.loads(sr.raw_json   or "{}")
         except Exception:
             continue
 
-        # Hostnames → domain nodes
+        src = sr.source
+
+        # ── Hostnames / PTR (Shodan, SecurityTrails, VT) ──────────
         for hostname in (norm.get("hostnames") or [])[:5]:
-            if hostname and hostname not in seen_nodes:
-                node_id = f"host_{hostname}"
-                nodes.append({"data": {
-                    "id": node_id, "label": hostname,
-                    "type": "domain", "verdict": "unknown", "score": None,
-                }})
-                edges.append({"data": {
-                    "source": f"ioc_{ioc.id}", "target": node_id,
-                    "label": "resolves-to",
-                }})
-                seen_nodes.add(hostname)
+            if hostname:
+                nid = f"host_{hostname}"
+                if add_node(nid, hostname, "domain"):
+                    add_edge(central_id, nid, "resolves-to", "resolution")
 
-        # ASN node
-        asn = norm.get("asn") or norm.get("org")
-        if asn and asn not in seen_nodes:
-            node_id = f"asn_{asn}"
-            nodes.append({"data": {
-                "id": node_id, "label": asn,
-                "type": "asn", "verdict": "unknown", "score": None,
-            }})
-            edges.append({"data": {
-                "source": f"ioc_{ioc.id}", "target": node_id,
-                "label": "belongs-to",
-            }})
-            seen_nodes.add(asn)
+        # ── ASN / Organization ─────────────────────────────────────
+        asn = norm.get("asn")
+        if asn:
+            nid = f"asn_{asn}"
+            if add_node(nid, asn, "asn"):
+                add_edge(central_id, nid, "belongs-to", "network")
 
-        # Malware family node
+        # ── Malware family ─────────────────────────────────────────
         family = norm.get("malware_family")
-        if family and family not in seen_nodes:
-            node_id = f"fam_{family}"
-            nodes.append({"data": {
-                "id": node_id, "label": family,
-                "type": "malware", "verdict": "malicious", "score": None,
-            }})
-            edges.append({"data": {
-                "source": f"ioc_{ioc.id}", "target": node_id,
-                "label": "associated-with",
-            }})
-            seen_nodes.add(family)
+        if family:
+            nid = f"fam_{family}"
+            if add_node(nid, family, "malware", verdict="malicious"):
+                add_edge(central_id, nid, "associated-with", "threat")
 
-        # VirusTotal relations → enrich graph
-        if sr.source == "virustotal":
-            try:
-                raw = json.loads(sr.raw_json or "{}")
-                relations = raw.get("_relations", {})
-            except Exception:
-                relations = {}
+        # ── Tags as threat nodes (only meaningful threat tags) ─────
+        threat_tags = [
+            t for t in (norm.get("tags") or [])
+            if t and any(kw in t.lower() for kw in [
+                "malware", "ransomware", "botnet", "c2", "trojan",
+                "phishing", "spam", "scanner", "exploit", "backdoor",
+                "ddos", "bruteforce", "miner", "rat ", "worm"
+            ])
+        ]
+        for tag in threat_tags[:3]:
+            nid = f"tag_{tag.replace(' ','_')}"
+            if add_node(nid, tag, "tag", verdict="suspicious"):
+                add_edge(central_id, nid, "tagged-as", "threat")
 
-            # Resolutions: IP→Domain or Domain→IP
+        # ── StopForumSpam — spam reporter nodes ───────────────────
+        if src == "stopforumspam":
+            freq = norm.get("email_reports") or 0
+            if freq and freq > 0:
+                nid = f"sfs_{ioc.value}"
+                label = f"SFS: {freq} reports"
+                if add_node(nid, label, "threat",
+                            verdict="malicious" if freq > 10 else "suspicious"):
+                    add_edge(central_id, nid, "reported-spam", "threat")
+
+        # ── GreyNoise — classification node ───────────────────────
+        if src == "greynoise":
+            cl = norm.get("classification")
+            if cl and cl != "unknown":
+                nid = f"gn_{cl}"
+                if add_node(nid, f"GreyNoise: {cl}", "tag",
+                            verdict="malicious" if cl == "malicious" else "clean"):
+                    add_edge(central_id, nid, "classified-as", "intel")
+
+        # ── AbuseIPDB — abuse score node ──────────────────────────
+        if src == "abuseipdb":
+            score_val = norm.get("abuse_score") or 0
+            if score_val and score_val > 25:
+                nid = "abuseipdb_score"
+                if add_node(nid, f"AbuseIPDB: {score_val}%", "threat",
+                            verdict="malicious" if score_val >= 75 else "suspicious",
+                            score=score_val):
+                    add_edge(central_id, nid, "abuse-score", "intel")
+
+        # ── Pulsedive — pulse/feed nodes ──────────────────────────
+        if src == "pulsedive":
+            pulse_count = norm.get("pulse_count") or 0
+            if pulse_count and pulse_count > 0:
+                nid = f"pd_pulses"
+                if add_node(nid, f"Pulsedive: {pulse_count} feeds", "tag",
+                            verdict="suspicious" if pulse_count > 0 else "unknown"):
+                    add_edge(central_id, nid, "in-feeds", "intel")
+
+        # ── URLScan — technologies ─────────────────────────────────
+        if src == "urlscan":
+            for tech in (norm.get("technologies") or [])[:4]:
+                nid = f"tech_{tech.replace(' ','_')}"
+                if add_node(nid, tech, "technology"):
+                    add_edge(central_id, nid, "uses", "info")
+
+        # ── CriminalIP — VPN/Tor nodes ────────────────────────────
+        if src == "criminalip":
+            if norm.get("is_vpn"):
+                nid = "cip_vpn"
+                if add_node(nid, "VPN Detected", "tag", verdict="suspicious"):
+                    add_edge(central_id, nid, "is-vpn", "network")
+            if norm.get("is_tor"):
+                nid = "cip_tor"
+                if add_node(nid, "Tor Exit Node", "tag", verdict="malicious"):
+                    add_edge(central_id, nid, "is-tor", "network")
+
+        # ── VirusTotal relations ───────────────────────────────────
+        if src == "virustotal":
+            relations = raw.get("_relations", {})
+
             for item in (relations.get("resolutions") or [])[:5]:
-                attr = item.get("attributes", {})
-                related = (attr.get("host_name") or attr.get("ip_address") or
-                           item.get("id", ""))
-                if related and related not in seen_nodes:
-                    rtype = "domain" if "." in related and not related.replace(".","").isdigit() else "ip"
-                    node_id = f"vt_res_{related}"
-                    nodes.append({"data": {
-                        "id": node_id, "label": related,
-                        "type": rtype, "verdict": "unknown", "score": None,
-                    }})
-                    edges.append({"data": {
-                        "source": f"ioc_{ioc.id}", "target": node_id,
-                        "label": "resolves-to",
-                    }})
-                    seen_nodes.add(related)
+                attr    = item.get("attributes", {})
+                related = (attr.get("host_name") or attr.get("ip_address")
+                           or item.get("id", ""))
+                if related:
+                    rtype = ("domain" if "." in related
+                             and not related.replace(".", "").isdigit()
+                             else "ip")
+                    nid = f"vt_res_{related}"
+                    if add_node(nid, related, rtype):
+                        add_edge(central_id, nid, "resolves-to", "resolution")
 
-            # Communicating files (hashes)
             for item in (relations.get("communicating_files") or [])[:3]:
                 fhash = item.get("id", "")
-                fname = item.get("attributes", {}).get("meaningful_name", fhash[:12] + "…")
-                if fhash and fhash not in seen_nodes:
-                    node_id = f"vt_file_{fhash[:12]}"
-                    nodes.append({"data": {
-                        "id": node_id, "label": fname,
-                        "type": "hash", "verdict": "malicious", "score": None,
-                    }})
-                    edges.append({"data": {
-                        "source": f"ioc_{ioc.id}", "target": node_id,
-                        "label": "communicates-with",
-                    }})
-                    seen_nodes.add(fhash)
+                fname = (item.get("attributes", {})
+                             .get("meaningful_name", fhash[:16] + "…"))
+                if fhash:
+                    nid = f"vt_file_{fhash[:12]}"
+                    if add_node(nid, fname, "hash", verdict="malicious"):
+                        add_edge(central_id, nid, "communicates-with", "threat")
 
-            # Contacted IPs/Domains from file analysis
             for rel_key, rtype, edge_label in [
                 ("contacted_ips",     "ip",     "contacted"),
                 ("contacted_domains", "domain", "contacted"),
             ]:
                 for item in (relations.get(rel_key) or [])[:4]:
                     val = item.get("id", "")
-                    if val and val not in seen_nodes:
-                        node_id = f"vt_{rel_key}_{val}"
-                        nodes.append({"data": {
-                            "id": node_id, "label": val,
-                            "type": rtype, "verdict": "unknown", "score": None,
-                        }})
-                        edges.append({"data": {
-                            "source": f"ioc_{ioc.id}", "target": node_id,
-                            "label": edge_label,
-                        }})
-                        seen_nodes.add(val)
+                    if val:
+                        nid = f"vt_{rel_key}_{val}"
+                        if add_node(nid, val, rtype):
+                            add_edge(central_id, nid, edge_label, "resolution")
+
+        # ── SecurityTrails — DNS records ───────────────────────────
+        if src == "securitytrails":
+            dns = norm.get("dns_records") or {}
+            a_records = dns.get("a", {}).get("values", []) or []
+            for rec in a_records[:3]:
+                ip = rec.get("ip", "")
+                if ip:
+                    nid = f"st_ip_{ip}"
+                    if add_node(nid, ip, "ip"):
+                        add_edge(central_id, nid, "a-record", "resolution")
 
     return {"nodes": nodes, "edges": edges}
 
