@@ -79,8 +79,10 @@ class URLScanConnector(BaseConnector):
         detail = raw.get("_detail", {})
 
         result.screenshot_url = (
-            f"https://urlscan.io/screenshots/{task.get('uuid')}.png"
-            if task.get("uuid") else None
+            # Try detail response first (more reliable)
+            detail.get("task", {}).get("screenshotURL")
+            or (f"https://urlscan.io/screenshots/{task.get('uuid')}.png"
+                if task.get("uuid") else None)
         )
         result.http_status  = page.get("status")
         result.country      = page.get("country")

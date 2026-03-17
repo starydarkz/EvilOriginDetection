@@ -97,7 +97,14 @@ class NormalizedResult:
         self.verdict_hint  = "unknown"   # always a string, never None
 
     def to_dict(self) -> dict:
-        return {s: getattr(self, s) for s in self.__slots__}
+        result = {}
+        for s in self.__slots__:
+            val = getattr(self, s)
+            if hasattr(val, "value"):
+                result[s] = val.value
+            else:
+                result[s] = val
+        return result
 
 
 class BaseConnector(abc.ABC):
