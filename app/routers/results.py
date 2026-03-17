@@ -84,18 +84,69 @@ async def results_page(
         for src in sources.keys()
     }
 
+    # Merge and deduplicate ports + technologies from all sources
+    # Priority: Shodan > Pulsedive > CriminalIP (most reliable first)
+    merged_ports = []
+    merged_techs = []
+    seen_ports   = set()
+    seen_techs   = set()
+    port_source  = {}  # port → source name
+
+    for src_priority in ["shodan", "pulsedive", "criminalip", "urlscan",
+                         "securitytrails"]:
+        sdata = sources.get(src_priority, {})
+        if sdata.get("status") != "ok":
+            continue
+        for p in (sdata.get("ports") or []):
+            if p and p not in seen_ports:
+                seen_ports.add(p)
+                merged_ports.append(p)
+                port_source[p] = src_priority
+        for t in (sdata.get("technologies") or []):
+            tl = t.lower() if t else ""
+            if t and tl not in seen_techs:
+                seen_techs.add(tl)
+                merged_techs.append(t)
+
+    merged_ports.sort()
+    merged_ports = merged_ports[:20]
+    merged_techs = merged_techs[:12]
+
+    # Merge all tags across sources, deduplicating
+    all_tags_merged = []
+    seen_tags_lower = set()
+    for sdata in sources.values():
+        if sdata.get("status") != "ok":
+            continue
+        for tag in (sdata.get("tags") or []):
+            tl = tag.lower() if tag else ""
+            if tag and tl not in seen_tags_lower:
+                seen_tags_lower.add(tl)
+                all_tags_merged.append(tag)
+
+    # Also include ioc-level tags
+    for tag in (tags or []):
+        tl = tag.lower() if tag else ""
+        if tag and tl not in seen_tags_lower:
+            seen_tags_lower.add(tl)
+            all_tags_merged.append(tag)
+    all_tags_merged = all_tags_merged[:20]
+
     return templates.TemplateResponse("results.html", {
-        "request":      request,
-        "ioc":          ioc,
-        "tags":         tags,
-        "metadata":     metadata,
-        "sources":      sources,
-        "timeline":     timeline,
-        "history":      history,
-        "geo":          geo,
-        "is_cached":    is_cached,
-        "cache_age_h":  cache_age_h,
-        "source_links": source_links,
+        "request":       request,
+        "ioc":           ioc,
+        "tags":          all_tags_merged,
+        "metadata":      metadata,
+        "sources":       sources,
+        "timeline":      timeline,
+        "history":       history,
+        "geo":           geo,
+        "is_cached":     is_cached,
+        "cache_age_h":   cache_age_h,
+        "source_links":  source_links,
+        "merged_ports":  merged_ports,
+        "merged_techs":  merged_techs,
+        "port_source":   port_source,
     })
 
 
@@ -528,24 +579,44 @@ def _source_summary(source: str, data: dict) -> str:
         case "virustotal":
             mal   = data.get("malicious_count", 0)
             total = data.get("total_engines", 0)
-            return f"{mal}/{total} engines detected"
+            if not total:
+                return "Scanned"
+            return f"{mal}/{total} engines flagged" if mal else f"Clean — {total} engines"
         case "abuseipdb":
-            score = data.get("abuse_score", 0)
+            score = data.get("abuse_score", 0) or 0
             return f"{score}% abuse confidence"
         case "greynoise":
-            cl = data.get("classification", "unknown")
-            return f"Classification: {cl}"
+            cl = data.get("classification", "unknown") or "unknown"
+            noise = " · scanner" if data.get("is_noise") else ""
+            return f"{cl.capitalize()}{noise}"
         case "shodan":
             ports = data.get("ports") or []
-            return f"{len(ports)} open ports" if ports else "No open ports"
+            return f"{len(ports)} open port(s)" if ports else "Scanned"
+        case "pulsedive":
+            # Clean summary: just feed count or "Scanned"
+            count = data.get("pulse_count") or 0
+            return f"{count} feed(s)" if count else "Scanned"
+        case "criminalip":
+            score = data.get("abuse_score") or 0
+            if score:
+                return f"Risk score {score}/100"
+            tags = data.get("tags") or []
+            return ", ".join(tags[:2]) if tags else "Scanned"
         case "malwarebazaar":
             family = data.get("malware_family")
-            return f"Malware family: {family}" if family else "Found in MalwareBazaar"
+            return f"Family: {family}" if family else "Sample found"
         case "urlscan":
-            return f"Screenshot available" if data.get("screenshot_url") else "Scanned"
+            return "Screenshot available" if data.get("screenshot_url") else "Scanned"
+        case "securitytrails":
+            dns = data.get("dns_records") or {}
+            count = sum(len(v.get("values", [])) for v in dns.values() if isinstance(v, dict))
+            return f"{count} DNS record(s)" if count else "Scanned"
+        case "stopforumspam":
+            freq = data.get("email_reports") or 0
+            return f"{freq} spam report(s)" if freq else "Not listed"
         case _:
             hint = data.get("verdict_hint", "")
-            return hint.capitalize() if hint else "Data available"
+            return hint.capitalize() if hint else "Scanned"
 
 
 def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:

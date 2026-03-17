@@ -348,54 +348,66 @@
           {% if gn.get('is_noise') %}
           <tr><td>GreyNoise</td><td style="color:var(--text3)">Known scanner / noise</td></tr>
           {% endif %}
+          {% if merged_techs %}
+          <tr><td>Technologies</td><td>{{ merged_techs | join(', ') }}</td></tr>
+          {% endif %}
         </table>
       </div>
 
       {# ── TAB: PORTS (IP only) ── #}
       <div class="tab-panel" id="tab-ports">
-        {% set sh  = sources.get('shodan', {}) %}
-        {% set cip = sources.get('criminalip', {}) %}
-        {% set port_list = sh.get('ports') or cip.get('ports') or [] %}
-        {% set port_source = 'Shodan' if sh.get('ports') else 'Criminal IP' %}
-        {% if port_list %}
+        {% if merged_ports %}
         <table class="port-table">
           <thead>
-            <tr><th>Port</th><th>Protocol</th><th>Flag</th></tr>
+            <tr><th>Port</th><th>Service</th><th>Source</th></tr>
           </thead>
           <tbody>
-            {% for port in port_list %}
+            {% for port in merged_ports %}
             <tr>
-              <td class="{% if port in [4444,8080,8888,1337,31337,9001,6667] %}port-warn{% endif %}">
+              <td class="{% if port in [4444,8080,8888,1337,31337,9001,6667,4899] %}port-warn{% endif %}"
+                  style="font-family:'JetBrains Mono',monospace;font-weight:500">
                 {{ port }}
               </td>
-              <td>TCP</td>
               <td>
-                {% if port in [22] %}SSH
-                {% elif port in [80] %}HTTP
-                {% elif port in [443] %}HTTPS
-                {% elif port in [21] %}FTP
-                {% elif port in [25,587,465] %}SMTP
-                {% elif port in [3306] %}MySQL
-                {% elif port in [6379] %}Redis
-                {% elif port in [27017] %}MongoDB
-                {% elif port in [9200,9300] %}Elasticsearch
-                {% elif port in [4444,8080,8888,1337,31337] %}⚠ Suspicious
-                {% else %}—{% endif %}
+                {% if port == 21 %}FTP
+                {% elif port == 22 %}SSH
+                {% elif port == 23 %}Telnet
+                {% elif port == 25 %}SMTP
+                {% elif port in [53] %}DNS
+                {% elif port == 80 %}HTTP
+                {% elif port == 110 %}POP3
+                {% elif port == 143 %}IMAP
+                {% elif port in [443,8443] %}HTTPS
+                {% elif port in [465,587] %}SMTP/S
+                {% elif port == 993 %}IMAPS
+                {% elif port == 995 %}POP3S
+                {% elif port == 1433 %}MSSQL
+                {% elif port == 3306 %}MySQL
+                {% elif port == 3389 %}RDP
+                {% elif port == 5432 %}PostgreSQL
+                {% elif port == 5900 %}VNC
+                {% elif port == 6379 %}Redis
+                {% elif port in [8080,8888] %}HTTP-alt
+                {% elif port == 9200 %}Elasticsearch
+                {% elif port == 27017 %}MongoDB
+                {% elif port in [4444,1337,31337,9001,6667] %}⚠ Suspicious
+                {% else %}Unknown{% endif %}
+              </td>
+              <td style="font-size:12px;color:var(--text3)">
+                {{ port_source.get(port, '') | capitalize }}
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
-        <p style="font-size:10px;color:var(--text3);margin-top:8px">
-          Source: {{ port_source }} ·
-          {% if sh.get('last_seen') %}Last indexed {{ sh.last_seen[:10] }}{% endif %}
-        </p>
         {% else %}
-        <p style="font-size:11px;color:var(--text3)">
-          {% if sources.get('shodan', {}).get('status') == 'no_key' and sources.get('criminalip', {}).get('status') == 'no_key' %}
+        <p style="font-size:13px;color:var(--text3)">
+          {% set sh_status  = sources.get('shodan',    {}).get('status') %}
+          {% set cip_status = sources.get('criminalip',{}).get('status') %}
+          {% if sh_status == 'no_key' and cip_status == 'no_key' %}
           Shodan and Criminal IP keys not configured.
           {% else %}
-          No open ports found in threat intelligence data.
+          No open ports found.
           {% endif %}
         </p>
         {% endif %}
@@ -462,11 +474,12 @@
           <img src="{{ us.screenshot_url }}" alt="Screenshot of {{ ioc.value }}"
                loading="lazy" onerror="this.parentElement.innerHTML='<p style=\'padding:16px;font-size:11px;color:var(--text3)\'>Screenshot unavailable.</p>'">
         </div>
-        {% if us.get('http_status') %}
-        <p style="font-size:10px;color:var(--text3);margin-top:6px">
-          HTTP {{ us.http_status }} ·
-          {% if us.get('technologies') %}
-          Technologies: {{ us.technologies | join(', ') }}
+        {% if us.get('http_status') or merged_techs %}
+        <p style="font-size:12px;color:var(--text3);margin-top:8px">
+          {% if us.get('http_status') %}HTTP {{ us.http_status }}{% endif %}
+          {% if merged_techs %}
+          {% if us.get('http_status') %} · {% endif %}
+          Technologies: {{ merged_techs | join(', ') }}
           {% endif %}
         </p>
         {% endif %}
