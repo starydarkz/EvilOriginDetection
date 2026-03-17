@@ -143,12 +143,16 @@ class BaseConnector(abc.ABC):
             self.normalize(raw, ioc, result)
             result.status = SourceStatus.ok
         except httpx.TimeoutException:
-            result.status    = SourceStatus.timeout
-            result.error     = "Request timed out"
+            result.status     = SourceStatus.timeout
+            result.error      = "Request timed out"
+            result.fetched_ms = int((time.monotonic() - t0) * 1000)
+        except httpx.HTTPStatusError as exc:
+            result.status     = SourceStatus.error
+            result.error      = f"HTTP {exc.response.status_code}"
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
         except Exception as exc:
-            result.status = SourceStatus.error
-            result.error  = str(exc)
+            result.status     = SourceStatus.error
+            result.error      = str(exc)
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
 
         return result
