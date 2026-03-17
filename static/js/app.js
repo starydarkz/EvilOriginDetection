@@ -75,3 +75,34 @@ function toggleCollapse(bodyId, chevId) {
   if (body) body.classList.toggle('open');
   if (chev) chev.classList.toggle('open');
 }
+
+// ── Keyboard shortcuts ────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  const ta = document.getElementById('ioc-input');
+  if (!ta) return;
+
+  // / or Ctrl+L → focus input (when not already focused)
+  if ((e.key === '/' || (e.ctrlKey && e.key === 'l')) &&
+      document.activeElement !== ta) {
+    e.preventDefault();
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    return;
+  }
+
+  // Ctrl+Enter or Cmd+Enter → submit form
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    const form = document.getElementById('analyze-form');
+    if (form) form.submit();
+    return;
+  }
+
+  // Escape → clear input (only when focused)
+  if (e.key === 'Escape' && document.activeElement === ta) {
+    ta.value = '';
+    updateCounter(ta);
+    ta.blur();
+    return;
+  }
+});

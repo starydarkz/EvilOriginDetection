@@ -327,53 +327,200 @@ async def rescan(
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _build_timeline(ioc, sources: dict, history) -> list[dict]:
+    """
+    Build timeline from ACTUAL IOC activity reported by intelligence sources.
+    Each event represents something that happened to/with this indicator,
+    not just when we queried it.
+    """
+    import json as _json
+    from datetime import datetime as _dt
+
     events = []
 
-    SOURCE_LABELS = {
-        "virustotal":    ("VT",  "vt"),
-        "abuseipdb":     ("AB",  "abuse"),
-        "greynoise":     ("GN",  "greynoise"),
-        "shodan":        ("SH",  "shodan"),
-        "pulsedive":     ("PD",  "pulsedive"),
-        "malwarebazaar": ("MB",  "bazaar"),
-        "urlscan":       ("US",  "urlscan"),
-        "securitytrails":("ST",  "securitytrails"),
-        "criminalip":    ("CIP", "criminalip"),
-        "stopforumspam": ("SFS", "stopforumspam"),
-    }
+    def add(date, source, label, summary, verdict="unknown", link=None):
+        if not summary:
+            return
+        events.append({
+            "date":    date,
+            "source":  source,
+            "label":   label,
+            "verdict": verdict,
+            "summary": summary,
+            "link":    link,
+        })
+
+    ioc_link = lambda src: _source_link(src, ioc.value, ioc.type.value)
 
     for src_name, data in sources.items():
         if data.get("status") != "ok":
             continue
-        label, badge = SOURCE_LABELS.get(src_name, (src_name[:3].upper(), src_name))
-        ts = data.get("fetched_at") or data.get("last_seen")
 
-        verdict = data.get("verdict_hint", "unknown")
-        events.append({
-            "date":    ts,
-            "source":  src_name,
-            "label":   label,
-            "badge":   badge,
-            "verdict": verdict,
-            "summary": _source_summary(src_name, data),
-            "link":    _source_link(src_name, ioc.value, ioc.type.value),
-        })
+        # ── VirusTotal ────────────────────────────────────────────
+        if src_name == "virustotal":
+            # First submission date
+            first = data.get("first_submission")
+            if first:
+                ts = _epoch_to_iso(first)
+                add(ts, "virustotal", "VT",
+                    f"First submitted to VirusTotal",
+                    verdict="unknown", link=ioc_link("virustotal"))
 
-    # Add current analysis event
+            # Last analysis
+            last = data.get("last_seen")
+            if last:
+                ts = _epoch_to_iso(last)
+                mal   = data.get("malicious_count", 0)
+                total = data.get("total_engines", 0)
+                v = "malicious" if mal >= total * 0.3 else                     "suspicious" if mal > 0 else "clean"
+                add(ts, "virustotal", "VT",
+                    f"Last analysis: {mal}/{total} engines detected",
+                    verdict=v, link=ioc_link("virustotal"))
+
+        # ── AbuseIPDB ─────────────────────────────────────────────
+        elif src_name == "abuseipdb":
+            # Last report date
+            last_reported = data.get("last_seen")
+            if last_reported:
+                score = data.get("abuse_score", 0)
+                tags  = data.get("tags") or []
+                cats  = ", ".join(tags[:3]) if tags else "abuse"
+                v = "malicious" if score >= 75 else "suspicious" if score >= 25 else "unknown"
+                add(last_reported[:19] if last_reported else None,
+                    "abuseipdb", "AbuseIPDB",
+                    f"Last abuse report — {score}% confidence"
+                    + (f" · {cats}" if cats else ""),
+                    verdict=v, link=ioc_link("abuseipdb"))
+
+        # ── GreyNoise ─────────────────────────────────────────────
+        elif src_name == "greynoise":
+            last = data.get("last_seen")
+            cl   = data.get("classification", "unknown")
+            if last or cl not in ("unknown", None):
+                noise = data.get("is_noise", False)
+                v = "malicious" if cl == "malicious" else                     "clean"     if cl == "benign"    else "unknown"
+                detail = cl
+                if noise:
+                    detail += " · internet scanner"
+                add(last[:19] if last else None,
+                    "greynoise", "GreyNoise",
+                    f"GreyNoise classification: {detail}",
+                    verdict=v, link=ioc_link("greynoise"))
+
+        # ── Shodan ────────────────────────────────────────────────
+        elif src_name == "shodan":
+            last = data.get("last_seen")
+            ports = data.get("ports") or []
+            if ports:
+                add(last[:10] if last else None,
+                    "shodan", "Shodan",
+                    f"Indexed by Shodan — {len(ports)} open port(s): "
+                    + ", ".join(str(p) for p in ports[:5])
+                    + ("…" if len(ports) > 5 else ""),
+                    verdict="unknown", link=ioc_link("shodan"))
+
+        # ── MalwareBazaar ─────────────────────────────────────────
+        elif src_name == "malwarebazaar":
+            first = data.get("first_submission")
+            family = data.get("malware_family") or data.get("file_name")
+            if first or family:
+                add(first[:19] if first else None,
+                    "malwarebazaar", "MalwareBazaar",
+                    f"Malware sample found"
+                    + (f" — family: {family}" if family else ""),
+                    verdict="malicious", link=ioc_link("malwarebazaar"))
+
+        # ── URLScan ───────────────────────────────────────────────
+        elif src_name == "urlscan":
+            last = data.get("last_seen")
+            http_status = data.get("http_status")
+            v = data.get("verdict_hint", "unknown")
+            if last:
+                detail = f"Scanned by URLScan"
+                if http_status:
+                    detail += f" — HTTP {http_status}"
+                techs = data.get("technologies") or []
+                if techs:
+                    detail += f" · {', '.join(techs[:2])}"
+                add(last[:19] if last else None,
+                    "urlscan", "URLScan",
+                    detail, verdict=v, link=ioc_link("urlscan"))
+
+        # ── StopForumSpam ─────────────────────────────────────────
+        elif src_name == "stopforumspam":
+            freq = data.get("email_reports") or 0
+            if freq and freq > 0:
+                v = "malicious" if freq > 10 else "suspicious"
+                add(None,  # SFS doesn't provide dates
+                    "stopforumspam", "SFS",
+                    f"Reported {freq} time(s) for forum spam",
+                    verdict=v, link=ioc_link("stopforumspam"))
+
+        # ── Pulsedive ─────────────────────────────────────────────
+        elif src_name == "pulsedive":
+            pulse_count = data.get("pulse_count") or 0
+            if pulse_count > 0:
+                v = data.get("verdict_hint", "unknown")
+                add(data.get("last_seen"),
+                    "pulsedive", "Pulsedive",
+                    f"Referenced in {pulse_count} threat feed(s)",
+                    verdict=v, link=ioc_link("pulsedive"))
+
+        # ── CriminalIP ────────────────────────────────────────────
+        elif src_name == "criminalip":
+            score = data.get("abuse_score") or 0
+            tags  = data.get("tags") or []
+            if score > 0 or tags:
+                v = data.get("verdict_hint", "unknown")
+                detail = f"Criminal IP score: {score}"
+                if tags:
+                    detail += f" · {', '.join(tags[:3])}"
+                add(None,
+                    "criminalip", "CriminalIP",
+                    detail, verdict=v, link=ioc_link("criminalip"))
+
+        # ── SecurityTrails ────────────────────────────────────────
+        elif src_name == "securitytrails":
+            created = data.get("creation_date")
+            if created:
+                add(str(created)[:10],
+                    "securitytrails", "SecurityTrails",
+                    f"Domain registered"
+                    + (f" via {data.get('registrar')}" if data.get("registrar") else ""),
+                    verdict="unknown", link=ioc_link("securitytrails"))
+
+    # Add current analysis event (always last)
     events.append({
         "date":    ioc.last_scan.isoformat() if ioc.last_scan else None,
         "source":  "eod",
         "label":   "EOD",
-        "badge":   "eod",
         "verdict": ioc.verdict.value if ioc.verdict else "unknown",
-        "summary": f"Analysis complete — Score {ioc.score}/100",
+        "summary": f"Analysis complete — Risk score {ioc.score}/100",
         "link":    None,
         "current": True,
     })
 
-    # Sort by date ascending, nulls last
-    events.sort(key=lambda e: e.get("date") or "9999")
+    # Sort chronologically, events without dates go after dated ones
+    def sort_key(e):
+        d = e.get("date")
+        if not d:
+            return "8888-01-01"  # undated before "current"
+        return str(d)[:19]
+
+    events.sort(key=sort_key)
     return events
+
+
+def _epoch_to_iso(val) -> str | None:
+    """Convert Unix timestamp int to ISO date string."""
+    if val is None:
+        return None
+    try:
+        from datetime import datetime
+        if isinstance(val, (int, float)) and val > 1000000000:
+            return datetime.utcfromtimestamp(val).strftime("%Y-%m-%dT%H:%M:%S")
+        return str(val)[:19]
+    except Exception:
+        return str(val)[:19] if val else None
 
 
 def _source_summary(source: str, data: dict) -> str:
