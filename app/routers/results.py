@@ -175,6 +175,67 @@ async def graph_data(
             }})
             seen_nodes.add(family)
 
+        # VirusTotal relations → enrich graph
+        if sr.source == "virustotal":
+            try:
+                raw = json.loads(sr.raw_json or "{}")
+                relations = raw.get("_relations", {})
+            except Exception:
+                relations = {}
+
+            # Resolutions: IP→Domain or Domain→IP
+            for item in (relations.get("resolutions") or [])[:5]:
+                attr = item.get("attributes", {})
+                related = (attr.get("host_name") or attr.get("ip_address") or
+                           item.get("id", ""))
+                if related and related not in seen_nodes:
+                    rtype = "domain" if "." in related and not related.replace(".","").isdigit() else "ip"
+                    node_id = f"vt_res_{related}"
+                    nodes.append({"data": {
+                        "id": node_id, "label": related,
+                        "type": rtype, "verdict": "unknown", "score": None,
+                    }})
+                    edges.append({"data": {
+                        "source": f"ioc_{ioc.id}", "target": node_id,
+                        "label": "resolves-to",
+                    }})
+                    seen_nodes.add(related)
+
+            # Communicating files (hashes)
+            for item in (relations.get("communicating_files") or [])[:3]:
+                fhash = item.get("id", "")
+                fname = item.get("attributes", {}).get("meaningful_name", fhash[:12] + "…")
+                if fhash and fhash not in seen_nodes:
+                    node_id = f"vt_file_{fhash[:12]}"
+                    nodes.append({"data": {
+                        "id": node_id, "label": fname,
+                        "type": "hash", "verdict": "malicious", "score": None,
+                    }})
+                    edges.append({"data": {
+                        "source": f"ioc_{ioc.id}", "target": node_id,
+                        "label": "communicates-with",
+                    }})
+                    seen_nodes.add(fhash)
+
+            # Contacted IPs/Domains from file analysis
+            for rel_key, rtype, edge_label in [
+                ("contacted_ips",     "ip",     "contacted"),
+                ("contacted_domains", "domain", "contacted"),
+            ]:
+                for item in (relations.get(rel_key) or [])[:4]:
+                    val = item.get("id", "")
+                    if val and val not in seen_nodes:
+                        node_id = f"vt_{rel_key}_{val}"
+                        nodes.append({"data": {
+                            "id": node_id, "label": val,
+                            "type": rtype, "verdict": "unknown", "score": None,
+                        }})
+                        edges.append({"data": {
+                            "source": f"ioc_{ioc.id}", "target": node_id,
+                            "label": edge_label,
+                        }})
+                        seen_nodes.add(val)
+
     return {"nodes": nodes, "edges": edges}
 
 
@@ -236,7 +297,7 @@ def _build_timeline(ioc, sources: dict, history) -> list[dict]:
             "badge":   badge,
             "verdict": verdict,
             "summary": _source_summary(src_name, data),
-            "link":    _source_link(src_name, ioc.value),
+            "link":    _source_link(src_name, ioc.value, ioc.type.value),
         })
 
     # Add current analysis event
@@ -281,10 +342,14 @@ def _source_summary(source: str, data: dict) -> str:
             return hint.capitalize() if hint else "Data available"
 
 
-def _source_link(source: str, value: str) -> str | None:
+def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
+    from urllib.parse import quote
     match source:
         case "virustotal":
-            return f"https://www.virustotal.com/gui/search/{value}"
+            type_map = {"ip": "ip-address", "domain": "domain",
+                        "hash": "file", "url": "url"}
+            vt_type = type_map.get(ioc_type, "search")
+            return f"https://www.virustotal.com/gui/{vt_type}/{quote(value, safe='')}"
         case "abuseipdb":
             return f"https://www.abuseipdb.com/check/{value}"
         case "greynoise":
@@ -292,22 +357,44 @@ def _source_link(source: str, value: str) -> str | None:
         case "shodan":
             return f"https://www.shodan.io/host/{value}"
         case "pulsedive":
-            return f"https://pulsedive.com/indicator/?ioc={value}"
+            return f"https://pulsedive.com/indicator/{quote(value, safe='')}"
         case "malwarebazaar":
             return f"https://bazaar.abuse.ch/sample/{value}"
         case "urlscan":
-            return f"https://urlscan.io/search/#page.url%3A{value}"
+            if ioc_type == "url":
+                return f"https://urlscan.io/search/#page.url:{quote(value, safe='')}"
+            return f"https://urlscan.io/search/#domain:{quote(value, safe='')}"
         case "securitytrails":
+            if ioc_type == "ip":
+                return f"https://securitytrails.com/list/ip/{value}"
             return f"https://securitytrails.com/domain/{value}"
         case "criminalip":
-            return f"https://www.criminalip.io/ip-detail?ip={value}"
+            q = quote(f"ip:{value}" if ioc_type == "ip" else
+                      f"domain:{value}" if ioc_type == "domain" else value)
+            return f"https://search.criminalip.io/asset/search?query={q}"
+        case "stopforumspam":
+            return f"https://www.stopforumspam.com/search?q={quote(value, safe='')}"
         case _:
             return None
 
 
 def _extract_geo(sources: dict) -> dict | None:
     geo = {}
-    for data in sources.values():
+    priority = ["criminalip", "shodan", "abuseipdb", "virustotal",
+                "greynoise", "pulsedive", "securitytrails"]
+
+    # Collect all source data in priority order
+    ordered = []
+    seen = set()
+    for src in priority:
+        if src in sources:
+            ordered.append(sources[src])
+            seen.add(src)
+    for src, data in sources.items():
+        if src not in seen:
+            ordered.append(data)
+
+    for data in ordered:
         if not geo.get("country") and data.get("country"):
             geo["country"] = data["country"]
         if not geo.get("city") and data.get("city"):
@@ -320,6 +407,12 @@ def _extract_geo(sources: dict) -> dict | None:
             geo["isp"] = data["isp"]
         if not geo.get("network") and data.get("network"):
             geo["network"] = data["network"]
+        # Lat/lon from CriminalIP or other sources that provide it
+        if not geo.get("lat") and data.get("latitude"):
+            geo["lat"] = data["latitude"]
+        if not geo.get("lon") and data.get("longitude"):
+            geo["lon"] = data["longitude"]
+
     return geo if geo else None
 
 

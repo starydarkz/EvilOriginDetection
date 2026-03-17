@@ -1,10 +1,14 @@
 """
 virustotal.py — VirusTotal v3 connector.
-Supports: IP, Domain, Hash (MD5/SHA1/SHA256), URL
+Supports: IP, Domain, Hash, URL
 Docs: https://developers.virustotal.com/reference
+
+Extracts:
+- Tags from attributes.tags
+- Relations: resolutions (IP↔Domain), communicating files, downloaded files
+  These are fetched via separate /relationships endpoints and used in graph
 """
 import base64
-from typing import Optional
 from app.models import IOCType
 from app.parser import ParsedIOC
 from .base import BaseConnector, NormalizedResult
@@ -18,10 +22,53 @@ class VirusTotalConnector(BaseConnector):
 
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         endpoint = self._endpoint(ioc)
-        async with self._client({"x-apikey": self.api_key}) as client:
+        headers  = {"x-apikey": self.api_key}
+
+        async with self._client(headers) as client:
+            # Main lookup
             r = await client.get(f"{BASE}{endpoint}")
             r.raise_for_status()
-            return r.json()
+            data = r.json()
+
+            # Fetch relations for graph enrichment
+            relations = await self._fetch_relations(client, ioc, endpoint)
+            if relations:
+                data["_relations"] = relations
+
+            return data
+
+    async def _fetch_relations(self, client, ioc: ParsedIOC,
+                               endpoint: str) -> dict:
+        """
+        Fetch relationship data for graph correlation.
+        Returns dict of {relation_type: [items]}
+        Only fetches the most useful relations per IOC type.
+        """
+        relations = {}
+        rel_map = {
+            IOCType.ip:     ["resolutions", "communicating_files"],
+            IOCType.domain: ["resolutions", "communicating_files",
+                             "historical_ssl_certificates"],
+            IOCType.hash:   ["contacted_ips", "contacted_domains",
+                             "dropped_files"],
+            IOCType.url:    ["contacted_ips", "contacted_domains"],
+        }
+        targets = rel_map.get(ioc.type, [])
+
+        for rel in targets:
+            try:
+                r = await client.get(
+                    f"{BASE}{endpoint}/relationships/{rel}",
+                    params={"limit": "5"}
+                )
+                if r.status_code == 200:
+                    items = r.json().get("data", [])
+                    if items:
+                        relations[rel] = items
+            except Exception:
+                pass   # relations are best-effort
+
+        return relations
 
     def _endpoint(self, ioc: ParsedIOC) -> str:
         match ioc.type:
@@ -32,7 +79,6 @@ class VirusTotalConnector(BaseConnector):
             case IOCType.hash:
                 return f"/files/{ioc.value}"
             case IOCType.url:
-                # VT requires base64url-encoded URL, no padding
                 encoded = base64.urlsafe_b64encode(
                     ioc.value.encode()
                 ).decode().rstrip("=")
@@ -45,14 +91,23 @@ class VirusTotalConnector(BaseConnector):
 
         result.malicious_count = stats.get("malicious", 0)
         result.total_engines   = sum(stats.values()) if stats else 0
-        result.tags            = attr.get("tags", [])
-        result.country         = attr.get("country")
-        result.asn             = attr.get("asn")
-        result.org             = attr.get("as_owner")
-        result.network         = attr.get("network")
-        result.last_seen       = attr.get("last_modification_date")
 
-        # Compute a quick verdict hint
+        # Tags — combine VT tags + popular threat categories
+        vt_tags = attr.get("tags", []) or []
+        categories = list((attr.get("popular_threat_classification") or {})
+                         .get("suggested_threat_label", "")
+                         .split("/") if attr.get("popular_threat_classification") else [])
+        result.tags = list(dict.fromkeys(
+            [t for t in vt_tags + categories if t]
+        ))[:15]
+
+        result.country  = attr.get("country")
+        result.asn      = attr.get("asn")
+        result.org      = attr.get("as_owner")
+        result.network  = attr.get("network")
+        result.last_seen = attr.get("last_modification_date")
+
+        # Verdict
         suspicious = stats.get("suspicious", 0)
         total      = result.total_engines or 1
         ratio      = (result.malicious_count + suspicious * 0.5) / total
@@ -67,9 +122,16 @@ class VirusTotalConnector(BaseConnector):
 
         # Hash-specific
         if ioc.type == IOCType.hash:
-            result.file_name      = (attr.get("names") or [None])[0]
-            result.file_type      = attr.get("type_description")
-            result.file_size      = attr.get("size")
-            result.malware_family = (attr.get("popular_threat_name") or
-                                     attr.get("suggested_threat_label"))
+            result.file_name    = (attr.get("names") or [None])[0]
+            result.file_type    = attr.get("type_description")
+            result.file_size    = attr.get("size")
+            result.malware_family = (
+                attr.get("popular_threat_name") or
+                attr.get("suggested_threat_label")
+            )
             result.first_submission = attr.get("first_submission_date")
+
+        # Relations → store for graph use
+        relations = raw.get("_relations", {})
+        if relations:
+            result.relations = relations   # stored in raw for graph router

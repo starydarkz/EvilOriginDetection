@@ -657,24 +657,57 @@ function copyToClipboard(text) {
 (function() {
   const mapEl = document.getElementById('geo-map');
   if (!mapEl) return;
+
+  function renderMap(lat, lon) {
+    const isDark = document.body.classList.contains('dark');
+    const tileUrl = isDark
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    try {
+      const map = L.map('geo-map', {
+        zoomControl: false, attributionControl: false,
+        scrollWheelZoom: false,
+      }).setView([lat, lon], 7);
+      L.tileLayer(tileUrl, { maxZoom: 18 }).addTo(map);
+      const icon = L.divIcon({
+        className: '',
+        html: '<div style="width:14px;height:14px;background:var(--accent);border-radius:50%;border:2.5px solid rgba(255,255,255,0.7);box-shadow:0 0 10px rgba(224,92,92,0.6)"></div>',
+        iconSize: [14,14], iconAnchor: [7,7]
+      });
+      L.marker([lat, lon], {icon}).addTo(map);
+    } catch(e) {
+      mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px">Map error</div>';
+    }
+  }
+
+  function showFallback() {
+    mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px;flex-direction:column;gap:4px"><span style="font-size:20px;opacity:0.3">⊙</span><span>Location data unavailable</span></div>';
+  }
+
+  // Load Leaflet then fetch coords
   const script = document.createElement('script');
   script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  script.onerror = showFallback;
   script.onload = () => {
-    // Use ip-api.com free endpoint for coords (no key needed)
-    fetch('https://ip-api.com/json/{{ ioc.value }}?fields=lat,lon,status')
+    // Try ipapi.co — better CORS support than ip-api.com
+    fetch('https://ipapi.co/{{ ioc.value }}/json/', {
+      headers: {'Accept': 'application/json'}
+    })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => {
+      if (d.error || !d.latitude) throw new Error('no coords');
+      renderMap(d.latitude, d.longitude);
+    })
+    .catch(() => {
+      // Fallback: ip-api.com
+      fetch('https://ip-api.com/json/{{ ioc.value }}?fields=lat,lon,status')
       .then(r => r.json())
       .then(d => {
-        if (d.status !== 'success') { mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px">Location unavailable</div>'; return; }
-        const isDark = document.body.classList.contains('dark');
-        const tileUrl = isDark
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-        const map = L.map('geo-map', { zoomControl:false, attributionControl:false }).setView([d.lat, d.lon], 8);
-        L.tileLayer(tileUrl, { maxZoom:18 }).addTo(map);
-        const icon = L.divIcon({ className:'', html:`<div style="width:12px;height:12px;background:var(--accent);border-radius:50%;border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 8px var(--accent-glow)"></div>`, iconSize:[12,12], iconAnchor:[6,6] });
-        L.marker([d.lat, d.lon], {icon}).addTo(map);
+        if (d.status === 'success') renderMap(d.lat, d.lon);
+        else showFallback();
       })
-      .catch(() => { mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px">Map unavailable</div>'; });
+      .catch(showFallback);
+    });
   };
   document.head.appendChild(script);
 })();

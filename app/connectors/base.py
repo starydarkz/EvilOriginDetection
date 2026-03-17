@@ -75,6 +75,10 @@ class NormalizedResult:
         "email_reports",
         "username_hits",        # WhatsMyName results list
 
+        # Geolocation (when available from source)
+        "latitude",
+        "longitude",
+
         # Raw
         "raw",                  # full original API response dict
         "error",                # error message if status != ok
