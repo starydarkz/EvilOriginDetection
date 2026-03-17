@@ -94,6 +94,7 @@ class NormalizedResult:
         self.dns_records   = {}
         self.technologies  = []
         self.username_hits = []
+        self.verdict_hint  = "unknown"   # always a string, never None
 
     def to_dict(self) -> dict:
         return {s: getattr(self, s) for s in self.__slots__}

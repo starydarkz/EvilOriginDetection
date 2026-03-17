@@ -157,7 +157,7 @@
           {% for src_key, src_label, weight in source_weights %}
             {% set src = sources.get(src_key, {}) %}
             {% if src.get('status') == 'ok' %}
-              {% set hint = src.get('verdict_hint', 'unknown') %}
+              {% set hint = src.get('verdict_hint') or 'unknown' %}
               {% set bar_color = 'var(--v-' ~ hint ~ ')' %}
               {% set bar_pct = 0 %}
               {% if src_key == 'virustotal' and src.get('total_engines') %}
@@ -514,7 +514,7 @@
             <tr>
               <td>Status</td>
               <td style="color:var(--v-{{ sfs.get('verdict_hint','unknown') }})">
-                {{ sfs.get('verdict_hint', 'unknown').capitalize() }}
+                {{ (sfs.get('verdict_hint') or 'unknown') | capitalize }}
               </td>
             </tr>
           </table>
@@ -563,7 +563,7 @@
       {% for src_key, src_label, base_url in source_meta %}
         {% set src = sources.get(src_key, {}) %}
         {% set status = src.get('status', 'skipped') %}
-        {% set hint = src.get('verdict_hint', 'unknown') %}
+        {% set hint = src.get('verdict_hint') or 'unknown' %}
         {% set dot_color = 'var(--v-' ~ hint ~ ')' if status == 'ok' else 'var(--border2)' %}
         <div class="source-row {{ 'no-key' if status == 'no_key' else '' }} {{ 'error' if status == 'error' else '' }}">
           <span class="source-dot" style="background:{{ dot_color }}"></span>
@@ -578,7 +578,7 @@
               {% elif src_key == 'malwarebazaar' %}{{ src.get('malware_family') or 'Found' if src.get('file_name') else 'Not found' }}
               {% elif src_key == 'stopforumspam' %}{{ src.get('email_reports',0) }} reports
               {% elif src_key == 'urlscan' %}{{ 'Screenshot' if src.get('screenshot_url') else 'Scanned' }}
-              {% else %}{{ hint.capitalize() }}{% endif %}
+              {% else %}{{ (hint or 'unknown') | capitalize }}{% endif %}
             {% elif status == 'no_key' %}No key configured
             {% elif status == 'skipped' %}N/A for {{ ioc.type.value }}
             {% elif status == 'error' %}Error — {{ src.get('error','') | truncate(30) }}
