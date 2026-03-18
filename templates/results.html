@@ -344,12 +344,30 @@
           {% if unified.usage_type %}
           <tr><td>Usage Type</td><td>{{ unified.usage_type }}</td></tr>
           {% endif %}
-          {% if unified.is_tor %}
-          <tr><td>Tor Exit Node</td><td style="color:var(--v-malicious)">Yes</td></tr>
+
+          {# ── Network classification flags — always shown ─────── #}
+          {% macro flag_cell(val) %}
+            {% if val == true %}
+              <td style="color:var(--v-malicious);font-weight:500">Yes ✓</td>
+            {% elif val == false %}
+              <td style="color:var(--v-clean)">No</td>
+            {% else %}
+              <td style="color:var(--text3);font-style:italic">Not checked</td>
+            {% endif %}
+          {% endmacro %}
+
+          <tr><td>Tor Exit Node</td>{{ flag_cell(unified.is_tor) }}</tr>
+          <tr><td>VPN</td>{{ flag_cell(unified.is_vpn) }}</tr>
+          <tr><td>Proxy</td>{{ flag_cell(unified.is_proxy) }}</tr>
+          <tr><td>Hosting / DC</td>{{ flag_cell(unified.is_hosting) }}</tr>
+          <tr><td>Scanner</td>{{ flag_cell(unified.is_scanner) }}</tr>
+          {% if unified.is_mobile is not none %}
+          <tr><td>Mobile</td>{{ flag_cell(unified.is_mobile) }}</tr>
           {% endif %}
-          {% if unified.is_vpn %}
-          <tr><td>VPN / Proxy</td><td style="color:var(--v-suspicious)">Detected</td></tr>
+          {% if unified.is_darkweb is not none %}
+          <tr><td>Darkweb</td>{{ flag_cell(unified.is_darkweb) }}</tr>
           {% endif %}
+
           {% if unified.technologies %}
           <tr><td>Technologies</td><td>{{ unified.technologies | join(', ') }}</td></tr>
           {% endif %}

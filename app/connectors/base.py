@@ -72,6 +72,11 @@ class NormalizedResult:
         "usage_type",           # datacenter|residential|vpn|tor|mobile...
         "is_tor",
         "is_vpn",
+        "is_proxy",
+        "is_hosting",
+        "is_mobile",
+        "is_scanner",
+        "is_darkweb",
         "is_noise",
 
         # ── ports ─────────────────────────────────────────────────

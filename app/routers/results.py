@@ -182,6 +182,22 @@ async def results_page(
     wmn = sources.get("whatsmyname",     {})
     sfs = sources.get("stopforumspam",   {})
 
+    def _tri_flag(vals: list) -> bool | None:
+        """
+        Tri-state flag merge across sources.
+        True  → at least one source says True
+        False → all sources that checked say False (none said True)
+        None  → no source has data (all None/missing)
+        """
+        has_data = False
+        for v in vals:
+            if v is None:
+                continue
+            has_data = True
+            if v:
+                return True
+        return False if has_data else None
+
     unified = {
         # ── Network / geo ─────────────────────────────────────────
         "country":    first(cip.get("country"), sh.get("country"),
@@ -198,8 +214,30 @@ async def results_page(
         "network":    first(vt.get("network"),  sh.get("network")),
         "hostnames":  first(sh.get("hostnames"), st.get("hostnames"), []),
         "usage_type": first(ab.get("usage_type")),
-        "is_tor":     any([cip.get("is_tor"), ab.get("is_tor")]),
-        "is_vpn":     bool(cip.get("is_vpn")),
+        # Tri-state network flags: True=confirmed / False=confirmed-not / None=unknown
+        # A source returning False is different from a source not checking at all
+        "is_tor":    _tri_flag([
+                         cip.get("is_tor"),   # CriminalIP checks tor
+                         ab.get("is_tor"),    # AbuseIPDB checks tor
+                     ]),
+        "is_vpn":    _tri_flag([
+                         cip.get("is_vpn"),   # CriminalIP checks VPN
+                     ]),
+        "is_proxy":  _tri_flag([
+                         cip.get("is_proxy") if ok("criminalip") else None,
+                     ]),
+        "is_hosting":_tri_flag([
+                         cip.get("is_hosting") if ok("criminalip") else None,
+                     ]),
+        "is_mobile": _tri_flag([
+                         cip.get("is_mobile") if ok("criminalip") else None,
+                     ]),
+        "is_scanner":_tri_flag([
+                         cip.get("is_scanner") if ok("criminalip") else None,
+                     ]),
+        "is_darkweb":_tri_flag([
+                         cip.get("is_darkweb") if ok("criminalip") else None,
+                     ]),
         "latitude":   first(pd.get("latitude")),
         "longitude":  first(pd.get("longitude")),
 
@@ -673,8 +711,10 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
                 return f"https://securitytrails.com/list/ip/{value}"
             return f"https://securitytrails.com/domain/{value}"
         case "criminalip":
-            q = quote(f"ip:{value}" if ioc_type == "ip" else
-                      f"domain:{value}" if ioc_type == "domain" else value)
+            # /asset/report/{ip} for IPs, /asset/search for domains
+            if ioc_type == "ip":
+                return f"https://www.criminalip.io/asset/report/{value}"
+            q = quote(f"domain:{value}")
             return f"https://search.criminalip.io/asset/search?query={q}"
         case "stopforumspam":
             return f"https://www.stopforumspam.com/search?q={quote(value, safe='')}"
