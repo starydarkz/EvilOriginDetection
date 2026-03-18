@@ -36,13 +36,6 @@ def test_abuseipdb_high():
     score, verdict = compute_score([r])
     assert verdict in (Verdict.malicious, Verdict.suspicious)
 
-def test_greynoise_benign_lowers_score():
-    r1 = make_result("virustotal", malicious_count=5, total_engines=38)
-    r2 = make_result("greynoise", classification="benign")
-    score1, _ = compute_score([r1])
-    score2, _ = compute_score([r1, r2])
-    assert score2 <= score1  # benign greynoise should not raise score
-
 def test_malwarebazaar_instant_malicious():
     r = make_result("malwarebazaar", file_name="trojan.exe", malware_family="Qbot")
     score, verdict = compute_score([r])

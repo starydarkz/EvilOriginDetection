@@ -146,24 +146,30 @@
 
         {# Per-source breakdown bars #}
         <div class="score-breakdown">
-          {% set source_weights = [
-            ('virustotal',  'VirusTotal',  45),
-            ('abuseipdb',   'AbuseIPDB',   20),
-            ('greynoise',   'GreyNoise',   15),
-            ('pulsedive',   'Pulsedive',   10),
-            ('malwarebazaar','MalwareBazaar',10),
-            ('criminalip',  'Criminal IP',  8),
+          {# Score breakdown — uses unified for values, sources for status #}
+          {% set score_rows = [
+            ('virustotal',   'VirusTotal',   45),
+            ('abuseipdb',    'AbuseIPDB',    20),
+            ('malwarebazaar','MalwareBazaar', 10),
+            ('pulsedive',    'Pulsedive',    10),
+            ('criminalip',   'Criminal IP',   8),
+            ('urlscan',      'URLScan',        5),
+            ('stopforumspam','StopForumSpam',  5),
           ] %}
-          {% for src_key, src_label, weight in source_weights %}
+          {% for src_key, src_label, weight in score_rows %}
             {% set src = sources.get(src_key, {}) %}
             {% if src.get('status') == 'ok' %}
               {% set hint = src.get('verdict_hint') or 'unknown' %}
               {% set bar_color = 'var(--v-' ~ hint ~ ')' %}
               {% set bar_pct = 0 %}
-              {% if src_key == 'virustotal' and src.get('total_engines') %}
-                {% set bar_pct = ((src.get('malicious_count',0) / src.get('total_engines',1)) * 100)|round|int %}
-              {% elif src_key == 'abuseipdb' %}
+              {% if src_key == 'virustotal' and unified.total_engines %}
+                {% set bar_pct = ((unified.malicious_count / unified.total_engines) * 100)|round|int %}
+              {% elif src_key == 'abuseipdb' and unified.abuse_score is not none %}
+                {% set bar_pct = unified.abuse_score %}
+              {% elif src_key == 'criminalip' and src.get('abuse_score') is not none %}
                 {% set bar_pct = src.get('abuse_score', 0) %}
+              {% elif src_key == 'stopforumspam' %}
+                {% set bar_pct = [src.get('email_reports', 0) * 5, 100] | min %}
               {% elif hint == 'malicious' %}{% set bar_pct = 85 %}
               {% elif hint == 'suspicious' %}{% set bar_pct = 50 %}
               {% elif hint == 'clean' %}{% set bar_pct = 8 %}
@@ -175,9 +181,13 @@
                 </div>
                 <span class="score-row-val">
                   {% if src_key == 'virustotal' %}
-                    {{ src.get('malicious_count',0) }}/{{ src.get('total_engines',0) }}
+                    {{ unified.malicious_count }}/{{ unified.total_engines }}
                   {% elif src_key == 'abuseipdb' %}
-                    {{ src.get('abuse_score',0) }}%
+                    {{ unified.abuse_score }}%
+                  {% elif src_key == 'malwarebazaar' %}
+                    {{ unified.malware_family or 'detected' if hint == 'malicious' else 'not found' }}
+                  {% elif src_key == 'stopforumspam' %}
+                    {{ src.get('email_reports', 0) }} reports
                   {% else %}
                     {{ hint }}
                   {% endif %}
@@ -308,48 +318,40 @@
       {# ── TAB: NETWORK (IP only) ── #}
       {% if ioc.type.value == 'ip' %}
       <div class="tab-panel active" id="tab-network">
-        {% set sh  = sources.get('shodan', {}) %}
-        {% set vt  = sources.get('virustotal', {}) %}
-        {% set ab  = sources.get('abuseipdb', {}) %}
-        {% set gn  = sources.get('greynoise', {}) %}
-        {% set cip = sources.get('criminalip', {}) %}
         <table class="info-table">
           <tr><td>IP</td><td>{{ ioc.value }}</td></tr>
-          {% if sh.get('hostnames') %}
-          <tr><td>PTR / rDNS</td><td>{{ sh.get('hostnames', []) | join(', ') }}</td></tr>
+          {% if unified.hostnames %}
+          <tr><td>PTR / rDNS</td><td>{{ unified.hostnames | join(', ') }}</td></tr>
           {% endif %}
-          {% if metadata.get('asn') %}
-          <tr><td>ASN</td><td>{{ metadata.asn }}</td></tr>
+          {% if unified.asn %}
+          <tr><td>ASN</td><td>{{ unified.asn }}</td></tr>
           {% endif %}
-          {% if metadata.get('org') %}
-          <tr><td>Organization</td><td>{{ metadata.org }}</td></tr>
+          {% if unified.org %}
+          <tr><td>Organization</td><td>{{ unified.org }}</td></tr>
           {% endif %}
-          {% if metadata.get('isp') %}
-          <tr><td>ISP</td><td>{{ metadata.isp }}</td></tr>
+          {% if unified.isp %}
+          <tr><td>ISP</td><td>{{ unified.isp }}</td></tr>
           {% endif %}
-          {% if metadata.get('network') %}
-          <tr><td>Network</td><td>{{ metadata.network }}</td></tr>
+          {% if unified.network %}
+          <tr><td>Network</td><td>{{ unified.network }}</td></tr>
           {% endif %}
-          {% if metadata.get('country') %}
-          <tr><td>Country</td><td>{{ metadata.country }}</td></tr>
+          {% if unified.country %}
+          <tr><td>Country</td><td>{{ unified.country }}</td></tr>
           {% endif %}
-          {% if metadata.get('city') %}
-          <tr><td>City</td><td>{{ metadata.city }}</td></tr>
+          {% if unified.city %}
+          <tr><td>City</td><td>{{ unified.city }}</td></tr>
           {% endif %}
-          {% if ab.get('usage_type') %}
-          <tr><td>Usage Type</td><td>{{ ab.usage_type }}</td></tr>
+          {% if unified.usage_type %}
+          <tr><td>Usage Type</td><td>{{ unified.usage_type }}</td></tr>
           {% endif %}
-          {% if cip.get('is_tor') or ab.get('is_tor') %}
+          {% if unified.is_tor %}
           <tr><td>Tor Exit Node</td><td style="color:var(--v-malicious)">Yes</td></tr>
           {% endif %}
-          {% if cip.get('is_vpn') %}
+          {% if unified.is_vpn %}
           <tr><td>VPN / Proxy</td><td style="color:var(--v-suspicious)">Detected</td></tr>
           {% endif %}
-          {% if gn.get('is_noise') %}
-          <tr><td>GreyNoise</td><td style="color:var(--text3)">Known scanner / noise</td></tr>
-          {% endif %}
-          {% if merged_techs %}
-          <tr><td>Technologies</td><td>{{ merged_techs | join(', ') }}</td></tr>
+          {% if unified.technologies %}
+          <tr><td>Technologies</td><td>{{ unified.technologies | join(', ') }}</td></tr>
           {% endif %}
         </table>
       </div>
@@ -363,17 +365,20 @@
           </thead>
           <tbody>
             {% for port in merged_ports %}
+            {% set svc_info = merged_services.get(port, {}) %}
+            {% set svc_name = svc_info.get('service', '') %}
             <tr>
               <td class="{% if port in [4444,8080,8888,1337,31337,9001,6667,4899] %}port-warn{% endif %}"
                   style="font-family:'JetBrains Mono',monospace;font-weight:500">
                 {{ port }}
               </td>
-              <td>
-                {% if port == 21 %}FTP
+              <td style="font-family:'JetBrains Mono',monospace;font-size:12px">
+                {% if svc_name %}{{ svc_name }}
+                {% elif port == 21 %}FTP
                 {% elif port == 22 %}SSH
                 {% elif port == 23 %}Telnet
                 {% elif port == 25 %}SMTP
-                {% elif port in [53] %}DNS
+                {% elif port == 53 %}DNS
                 {% elif port == 80 %}HTTP
                 {% elif port == 110 %}POP3
                 {% elif port == 143 %}IMAP
@@ -391,7 +396,7 @@
                 {% elif port == 9200 %}Elasticsearch
                 {% elif port == 27017 %}MongoDB
                 {% elif port in [4444,1337,31337,9001,6667] %}⚠ Suspicious
-                {% else %}Unknown{% endif %}
+                {% else %}—{% endif %}
               </td>
               <td style="font-size:12px;color:var(--text3)">
                 {{ port_source.get(port, '') | capitalize }}
@@ -402,9 +407,7 @@
         </table>
         {% else %}
         <p style="font-size:13px;color:var(--text3)">
-          {% set sh_status  = sources.get('shodan',    {}).get('status') %}
-          {% set cip_status = sources.get('criminalip',{}).get('status') %}
-          {% if sh_status == 'no_key' and cip_status == 'no_key' %}
+          {% if not unified.shodan_ok and sources.get('criminalip', {}).get('status') != 'ok' %}
           Shodan and Criminal IP keys not configured.
           {% else %}
           No open ports found.
@@ -416,26 +419,25 @@
 
       {# ── TAB: WHOIS ── #}
       <div class="tab-panel {% if ioc.type.value not in ['ip'] %}active{% endif %}" id="tab-whois">
-        {% set st = sources.get('securitytrails', {}) %}
-        {% if st.get('status') == 'ok' %}
+        {% if unified.registrar or unified.creation_date or unified.expiry_date or unified.hostnames %}
         <table class="info-table">
-          {% if st.get('registrar') %}
-          <tr><td>Registrar</td><td>{{ st.registrar }}</td></tr>
+          {% if unified.registrar %}
+          <tr><td>Registrar</td><td>{{ unified.registrar }}</td></tr>
           {% endif %}
-          {% if st.get('creation_date') %}
-          <tr><td>Created</td><td>{{ st.creation_date }}</td></tr>
+          {% if unified.creation_date %}
+          <tr><td>Created</td><td>{{ unified.creation_date }}</td></tr>
           {% endif %}
-          {% if st.get('expiry_date') %}
-          <tr><td>Expires</td><td>{{ st.expiry_date }}</td></tr>
+          {% if unified.expiry_date %}
+          <tr><td>Expires</td><td>{{ unified.expiry_date }}</td></tr>
           {% endif %}
-          {% if st.get('hostnames') %}
-          <tr><td>Resolves to</td><td>{{ st.hostnames | join(', ') }}</td></tr>
+          {% if unified.hostnames %}
+          <tr><td>Resolves to</td><td>{{ unified.hostnames | join(', ') }}</td></tr>
           {% endif %}
         </table>
         {% else %}
-        <p style="font-size:11px;color:var(--text3)">
-          {% if st.get('status') == 'no_key' %}SecurityTrails API key not configured.
-          {% else %}WHOIS data unavailable.{% endif %}
+        <p style="font-size:13px;color:var(--text3)">
+          {% if not unified.st_ok %}WHOIS data unavailable — SecurityTrails key not configured.
+          {% else %}No WHOIS data found.{% endif %}
         </p>
         {% endif %}
       </div>
@@ -443,9 +445,8 @@
       {# ── TAB: DNS ── #}
       {% if ioc.type.value in ['domain','url','email'] %}
       <div class="tab-panel" id="tab-dns">
-        {% set st = sources.get('securitytrails', {}) %}
-        {% if st.get('dns_records') %}
-        {% for record_type, records in st.dns_records.items() %}
+        {% if unified.dns_records %}
+        {% for record_type, records in unified.dns_records.items() %}
         <div style="margin-bottom:12px">
           <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.12em;
                       text-transform:uppercase;color:var(--text3);margin-bottom:5px">
@@ -460,7 +461,7 @@
         </div>
         {% endfor %}
         {% else %}
-        <p style="font-size:11px;color:var(--text3)">DNS records unavailable.</p>
+        <p style="font-size:13px;color:var(--text3)">DNS records unavailable.</p>
         {% endif %}
       </div>
       {% endif %}
@@ -468,24 +469,22 @@
       {# ── TAB: SCREENSHOT ── #}
       {% if ioc.type.value in ['domain','url'] %}
       <div class="tab-panel" id="tab-screenshot">
-        {% set us = sources.get('urlscan', {}) %}
-        {% if us.get('screenshot_url') %}
+        {% if unified.screenshot_url %}
         <div class="screenshot-frame">
-          <img src="{{ us.screenshot_url }}" alt="Screenshot of {{ ioc.value }}"
-               loading="lazy" onerror="this.parentElement.innerHTML='<p style=\'padding:16px;font-size:11px;color:var(--text3)\'>Screenshot unavailable.</p>'">
+          <img src="{{ unified.screenshot_url }}" alt="Screenshot of {{ ioc.value }}"
+               loading="lazy" onerror="this.parentElement.innerHTML='<p style=\'padding:16px;font-size:13px;color:var(--text3)\'>Screenshot unavailable.</p>'">
         </div>
-        {% if us.get('http_status') or merged_techs %}
-        <p style="font-size:12px;color:var(--text3);margin-top:8px">
-          {% if us.get('http_status') %}HTTP {{ us.http_status }}{% endif %}
-          {% if merged_techs %}
-          {% if us.get('http_status') %} · {% endif %}
-          Technologies: {{ merged_techs | join(', ') }}
-          {% endif %}
+        {% if unified.http_status or unified.http_title or unified.technologies %}
+        <p style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.6">
+          {% if unified.http_status %}HTTP {{ unified.http_status }}{% endif %}
+          {% if unified.http_title %} · "{{ unified.http_title[:80] }}"{% endif %}
+          {% if unified.technologies %} · {{ unified.technologies | join(', ') }}{% endif %}
+          {% if unified.redirects %} · {{ unified.redirects | length }} redirect(s){% endif %}
         </p>
         {% endif %}
         {% else %}
-        <p style="font-size:11px;color:var(--text3)">
-          {% if us.get('status') == 'no_key' %}URLScan.io API key not configured.
+        <p style="font-size:13px;color:var(--text3)">
+          {% if not unified.urlscan_ok %}URLScan.io key not configured.
           {% else %}No screenshot available for this indicator.{% endif %}
         </p>
         {% endif %}
@@ -495,31 +494,32 @@
       {# ── TAB: FILE INFO (hash only) ── #}
       {% if ioc.type.value == 'hash' %}
       <div class="tab-panel active" id="tab-file">
-        {% set vt = sources.get('virustotal', {}) %}
-        {% set mb = sources.get('malwarebazaar', {}) %}
         <table class="info-table">
-          {% if vt.get('file_name') or mb.get('file_name') %}
-          <tr><td>File Name</td><td>{{ vt.get('file_name') or mb.get('file_name') }}</td></tr>
+          {% if unified.file_name %}
+          <tr><td>File Name</td><td>{{ unified.file_name }}</td></tr>
           {% endif %}
-          {% if vt.get('file_type') or mb.get('file_type') %}
-          <tr><td>File Type</td><td>{{ vt.get('file_type') or mb.get('file_type') }}</td></tr>
+          {% if unified.file_type %}
+          <tr><td>File Type</td><td>{{ unified.file_type }}</td></tr>
           {% endif %}
-          {% if vt.get('file_size') or mb.get('file_size') %}
-          <tr><td>File Size</td><td>{{ vt.get('file_size') or mb.get('file_size') }} bytes</td></tr>
+          {% if unified.file_size %}
+          <tr><td>File Size</td><td>{{ unified.file_size }} bytes</td></tr>
           {% endif %}
-          {% if vt.get('malware_family') or mb.get('malware_family') %}
+          {% if unified.malware_family %}
           <tr>
             <td>Malware Family</td>
-            <td style="color:var(--v-malicious)">{{ vt.get('malware_family') or mb.get('malware_family') }}</td>
+            <td style="color:var(--v-malicious)">{{ unified.malware_family }}</td>
           </tr>
           {% endif %}
-          {% if vt.get('first_submission') or mb.get('first_submission') %}
-          <tr><td>First Seen</td><td>{{ vt.get('first_submission') or mb.get('first_submission') }}</td></tr>
+          {% if unified.first_submission %}
+          <tr><td>First Seen</td>
+          <td>{% set fs = unified.first_submission %}
+          {% if fs is number %}{{ (fs | string)[:10] }}{% else %}{{ fs | string | truncate(19, killwords=True, end='') }}{% endif %}
+          </td></tr>
           {% endif %}
-          <tr><td>Hash</td><td>{{ ioc.value }}</td></tr>
+          <tr><td>Hash</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all">{{ ioc.value }}</td></tr>
         </table>
-        {% if mb.get('status') == 'ok' %}
-        <p style="font-size:10px;color:var(--v-malicious);margin-top:8px">
+        {% if unified.mb_ok %}
+        <p style="font-size:13px;color:var(--v-malicious);margin-top:8px">
           ⚠ Found in MalwareBazaar — confirmed malware sample
         </p>
         {% endif %}
@@ -529,34 +529,41 @@
       {# ── TAB: EMAIL OSINT ── #}
       {% if ioc.type.value == 'email' %}
       <div class="tab-panel active" id="tab-email">
-        {% set wmn = sources.get('whatsmyname', {}) %}
-        {% set sfs = sources.get('stopforumspam', {}) %}
-        {% if sfs.get('status') == 'ok' %}
+        {% if unified.email_reports %}
         <div style="margin-bottom:12px">
           <div class="section-card-title" style="margin-bottom:8px">StopForumSpam</div>
           <table class="info-table">
-            <tr><td>Reports</td><td>{{ sfs.get('email_reports', 0) }}</td></tr>
+            <tr><td>Reports</td><td>{{ unified.email_reports }}</td></tr>
             <tr>
               <td>Status</td>
-              <td style="color:var(--v-{{ sfs.get('verdict_hint','unknown') }})">
-                {{ (sfs.get('verdict_hint') or 'unknown') | capitalize }}
+              <td style="color:var(--v-{{ unified.sfs_verdict }})">
+                {{ unified.sfs_verdict | capitalize }}
               </td>
             </tr>
+            {% if unified.sfs_confidence %}
+            <tr><td>Confidence</td><td>{{ unified.sfs_confidence | int }}%</td></tr>
+            {% endif %}
+            {% if unified.sfs_country %}
+            <tr><td>Reporter country</td><td>{{ unified.sfs_country }}</td></tr>
+            {% endif %}
           </table>
         </div>
         {% endif %}
-        {% if wmn.get('username_hits') %}
+        {% if unified.username_hits %}
         <div class="divider"></div>
         <div class="section-card-title" style="margin-bottom:8px">
-          WhatsMyName — {{ wmn.username_hits | length }} platform(s) found
+          WhatsMyName — {{ unified.username_hits | length }} platform(s) found
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:5px">
-          {% for hit in wmn.username_hits %}
+          {% for hit in unified.username_hits %}
           <a href="{{ hit.url }}" target="_blank" rel="noopener" class="source-pill ok">
             {{ hit.site }}
           </a>
           {% endfor %}
         </div>
+        {% endif %}
+        {% if not unified.email_reports and not unified.username_hits %}
+        <p style="font-size:13px;color:var(--text3)">No email OSINT data found.</p>
         {% endif %}
       </div>
       {% endif %}
@@ -575,7 +582,6 @@
       {% set source_meta = [
         ('virustotal',    'VirusTotal'),
         ('abuseipdb',     'AbuseIPDB'),
-        ('greynoise',     'GreyNoise'),
         ('shodan',        'Shodan'),
         ('pulsedive',     'Pulsedive'),
         ('criminalip',    'Criminal IP'),
@@ -583,6 +589,7 @@
         ('urlscan',       'URLScan.io'),
         ('securitytrails','SecurityTrails'),
         ('stopforumspam', 'StopForumSpam'),
+        ('whatsmyname',   'WhatsMyName'),
       ] %}
 
       {% for src_key, src_label in source_meta %}
@@ -597,17 +604,19 @@
             {% if status == 'ok' %}
               {% if src_key == 'virustotal' %}{{ src.get('malicious_count',0) }}/{{ src.get('total_engines',0) }} engines
               {% elif src_key == 'abuseipdb' %}{{ src.get('abuse_score',0) }}% abuse
-              {% elif src_key == 'greynoise' %}{{ src.get('classification','—') }}
               {% elif src_key == 'shodan' %}{{ (src.get('ports') or []) | length }} open ports
               {% elif src_key == 'pulsedive' %}
                 {{ src.get('pulse_count',0) }} feeds
-                {% if src.get('country') %} · {{ src.get('country') }}{% endif %}
-                {% if src.get('org') %} · {{ src.get('org') }}{% endif %}
+                {% if src.get('ports') %} · {{ src.get('ports')|length }} ports{% endif %}
               {% elif src_key == 'criminalip' %}
                 {% if src.get('abuse_score') is not none %}Score {{ src.get('abuse_score') }}{% else %}{{ (hint or 'unknown') | capitalize }}{% endif %}
               {% elif src_key == 'malwarebazaar' %}{{ src.get('malware_family') or 'Found' if src.get('file_name') else 'Not found' }}
               {% elif src_key == 'stopforumspam' %}{{ src.get('email_reports',0) }} reports
-              {% elif src_key == 'urlscan' %}{{ 'Screenshot' if src.get('screenshot_url') else 'Scanned' }}
+              {% elif src_key == 'urlscan' %}
+                {% if src.get('screenshot_url') %}Screenshot{% else %}Scanned{% endif %}
+                {% if src.get('http_title') %} · "{{ src.get('http_title')[:30] }}"{% endif %}
+              {% elif src_key == 'whatsmyname' %}
+                {{ (src.get('username_hits') or []) | length }} platform(s) found
               {% else %}{{ (hint or 'unknown') | capitalize }}{% endif %}
             {% elif status == 'no_key' %}No key configured
             {% elif status == 'skipped' %}N/A for {{ ioc.type.value }}
@@ -630,12 +639,12 @@
       <div id="geo-map"></div>
       <div class="divider"></div>
       <table class="info-table" style="margin-top:0">
-        {% if geo.get('country') %}<tr><td>Country</td><td>{{ geo.country }}</td></tr>{% endif %}
-        {% if geo.get('city')    %}<tr><td>City</td><td>{{ geo.city }}</td></tr>{% endif %}
-        {% if geo.get('org')     %}<tr><td>Org</td><td>{{ geo.org }}</td></tr>{% endif %}
-        {% if geo.get('asn')     %}<tr><td>ASN</td><td>{{ geo.asn }}</td></tr>{% endif %}
-        {% if geo.get('isp')     %}<tr><td>ISP</td><td>{{ geo.isp }}</td></tr>{% endif %}
-        {% if geo.get('network') %}<tr><td>Network</td><td>{{ geo.network }}</td></tr>{% endif %}
+        {% if unified.country %}<tr><td>Country</td><td>{{ unified.country }}</td></tr>{% endif %}
+        {% if unified.city    %}<tr><td>City</td><td>{{ unified.city }}</td></tr>{% endif %}
+        {% if unified.org     %}<tr><td>Org</td><td>{{ unified.org }}</td></tr>{% endif %}
+        {% if unified.asn     %}<tr><td>ASN</td><td>{{ unified.asn }}</td></tr>{% endif %}
+        {% if unified.isp     %}<tr><td>ISP</td><td>{{ unified.isp }}</td></tr>{% endif %}
+        {% if unified.network %}<tr><td>Network</td><td>{{ unified.network }}</td></tr>{% endif %}
       </table>
     </div>
     {% endif %}
@@ -715,30 +724,30 @@ function copyToClipboard(text) {
     mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px;flex-direction:column;gap:4px"><span style="font-size:20px;opacity:0.3">⊙</span><span>Location data unavailable</span></div>';
   }
 
-  // Load Leaflet then fetch coords
+  // Load Leaflet then resolve coordinates
   const script = document.createElement('script');
   script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
   script.onerror = showFallback;
   script.onload = () => {
-    // Try ipapi.co — better CORS support than ip-api.com
-    fetch('https://ipapi.co/{{ ioc.value }}/json/', {
-      headers: {'Accept': 'application/json'}
-    })
+    // Try 1: use lat/lon already in unified data (from Pulsedive or other sources)
+    {% if unified.latitude and unified.longitude %}
+    renderMap({{ unified.latitude }}, {{ unified.longitude }});
+    {% else %}
+    // Try 2: ipapi.co
+    fetch('https://ipapi.co/{{ ioc.value }}/json/', {headers: {'Accept': 'application/json'}})
     .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(d => {
       if (d.error || !d.latitude) throw new Error('no coords');
       renderMap(d.latitude, d.longitude);
     })
     .catch(() => {
-      // Fallback: ip-api.com
+      // Try 3: ip-api.com
       fetch('https://ip-api.com/json/{{ ioc.value }}?fields=lat,lon,status')
       .then(r => r.json())
-      .then(d => {
-        if (d.status === 'success') renderMap(d.lat, d.lon);
-        else showFallback();
-      })
+      .then(d => { if (d.status === 'success') renderMap(d.lat, d.lon); else showFallback(); })
       .catch(showFallback);
     });
+    {% endif %}
   };
   document.head.appendChild(script);
 })();

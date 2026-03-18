@@ -7,7 +7,6 @@ import asyncio
 from app.connectors.base import BaseConnector, NormalizedResult
 from app.connectors.virustotal    import VirusTotalConnector
 from app.connectors.abuseipdb     import AbuseIPDBConnector
-from app.connectors.greynoise     import GreyNoiseConnector
 from app.connectors.shodan        import ShodanConnector
 from app.connectors.malwarebazaar import MalwareBazaarConnector
 from app.connectors.urlscan       import URLScanConnector
@@ -34,10 +33,6 @@ def test_abuseipdb_only_ip():
     c = AbuseIPDBConnector()
     assert     c.supports(ioc("1.2.3.4", IOCType.ip))
     assert not c.supports(ioc("evil.com", IOCType.domain))
-
-def test_greynoise_only_ip():
-    assert GreyNoiseConnector().supports(ioc("1.2.3.4", IOCType.ip))
-    assert not GreyNoiseConnector().supports(ioc("evil.com", IOCType.domain))
 
 def test_malwarebazaar_only_hash():
     c = MalwareBazaarConnector()

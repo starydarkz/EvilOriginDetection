@@ -27,7 +27,6 @@ from config import get_settings, pick_key
 # Connector imports
 from app.connectors.virustotal   import VirusTotalConnector
 from app.connectors.abuseipdb    import AbuseIPDBConnector
-from app.connectors.greynoise    import GreyNoiseConnector
 from app.connectors.shodan       import ShodanConnector
 from app.connectors.pulsedive    import PulsediveConnector
 from app.connectors.criminalip   import CriminalIPConnector
@@ -50,7 +49,6 @@ def build_connectors() -> list:
     return [
         VirusTotalConnector(   pick_key(s.vt_key_1,              s.vt_key_2)),
         AbuseIPDBConnector(    pick_key(s.abuseipdb_key_1,       s.abuseipdb_key_2)),
-        GreyNoiseConnector(    pick_key(s.greynoise_key_1,       s.greynoise_key_2)),
         ShodanConnector(       pick_key(s.shodan_key_1,          s.shodan_key_2)),
         PulsediveConnector(    pick_key(s.pulsedive_key_1,       s.pulsedive_key_2)),
         CriminalIPConnector(   pick_key(s.criminalip_key_1,      s.criminalip_key_2)),

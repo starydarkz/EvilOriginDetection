@@ -44,6 +44,7 @@ BASE = "https://pulsedive.com/api"
 class PulsediveConnector(BaseConnector):
     SOURCE_NAME     = "pulsedive"
     SUPPORTED_TYPES = {IOCType.ip, IOCType.domain, IOCType.hash, IOCType.url}
+    DATA_CATEGORIES: ClassVar[set[str]] = {"host_info", "ports", "dns_whois", "threat", "web_osint", "relations"}
 
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         params = {
@@ -213,3 +214,37 @@ class PulsediveConnector(BaseConnector):
                 linked_iocs.append({"value": ival, "type": itype})
         if linked_iocs:
             raw["_linked_iocs"] = linked_iocs
+
+        # ── Reports for timeline ───────────────────────────────────
+        result.reports = []
+        stamp_added = raw.get("stamp_added")
+        stamp_seen  = raw.get("stamp_seen") or raw.get("stamp_probed")
+
+        if stamp_added:
+            result.reports.append({
+                "date":     stamp_added[:19],
+                "summary":  "First seen by Pulsedive",
+                "source":   "pulsedive",
+                "category": "host_info",
+            })
+        if result.pulse_count > 0:
+            feed_names = [
+                f.get("name", "") for f in feeds[:3] if f.get("name")
+            ]
+            detail = f"Present in {result.pulse_count} threat feed(s)"
+            if feed_names:
+                detail += f": {', '.join(feed_names)}"
+            result.reports.append({
+                "date":     stamp_seen[:19] if stamp_seen else None,
+                "summary":  f"Pulsedive — {detail}",
+                "source":   "pulsedive",
+                "category": "threat",
+            })
+        if result.ports:
+            result.reports.append({
+                "date":     stamp_seen[:19] if stamp_seen else None,
+                "summary":  f"Pulsedive host scan — {len(result.ports)} open port(s): "
+                            + ", ".join(str(p) for p in result.ports[:6]),
+                "source":   "pulsedive",
+                "category": "host_info",
+            })

@@ -25,6 +25,7 @@ MAX_SITES      = 40   # Max sites to check per query
 class WhatsMyNameConnector(BaseConnector):
     SOURCE_NAME     = "whatsmyname"
     SUPPORTED_TYPES = {IOCType.email}
+    DATA_CATEGORIES: ClassVar[set[str]] = {"web_osint"}
     TIMEOUT         = 30.0  # Override base timeout for this connector
 
     def requires_key(self) -> bool:
@@ -89,7 +90,25 @@ class WhatsMyNameConnector(BaseConnector):
         hits = raw.get("hits", [])
         result.username_hits = hits
         result.verdict_hint  = "unknown"
+
         if hits:
             result.tags.append(f"found-on-{len(hits)}-platforms")
-            categories = set(h.get("category", "") for h in hits if h.get("category"))
-            result.tags.extend(list(categories)[:3])
+            # Group categories
+            categories = {}
+            for h in hits:
+                cat = h.get("category", "other") or "other"
+                categories[cat] = categories.get(cat, 0) + 1
+            for cat, count in sorted(categories.items(), key=lambda x: -x[1])[:4]:
+                result.tags.append(f"{cat}:{count}")
+
+            # Reports for timeline
+            result.reports = [{
+                "date":     None,
+                "summary":  (
+                    f"WhatsMyName — username found on {len(hits)} platform(s): "
+                    + ", ".join(h.get("site", "") for h in hits[:5])
+                    + ("…" if len(hits) > 5 else "")
+                ),
+                "source":   "whatsmyname",
+                "category": "web_osint",
+            }]

@@ -1,37 +1,32 @@
 """
 criminalip.py — Criminal IP connector.
 Supports: IP, Domain
+Categories: host_info · ports · threat · abuse
 Docs: https://www.criminalip.io/developer/api
 
-Real API response structure confirmed from CriminalIP docs/GitHub:
+GET /v1/ip/summary — returns:
+  score{inbound,outbound} (0-5 scale)
+  tags{is_vpn,is_cloud,is_tor,is_proxy,is_hosting,is_mobile,is_darkweb,is_scanner,is_snort}
+  issues{same fields}
+  port{data:[{port, protocol, socket, app_name, app_type, ...}]}
+  country, city, org_name, as_no, as_name, isp
+  dangerous_info{is_dangerous}
 
-GET /v1/ip/summary?ip=VALUE
-Returns top-level fields (no "data" wrapper):
-  ip, score{inbound,outbound}, tags{is_vpn,is_cloud,is_tor,is_proxy,
-    is_hosting,is_mobile,is_darkweb,is_scanner,is_snort},
-  issues{is_vpn,...}, port{data:[{port,protocol,socket,...}]},
-  country, city, org_name, as_no, as_name, isp,
-  dangerous_info{is_dangerous,...}
-
-GET /v1/domain/summary?query=VALUE
-Returns: classification, country, score{score}, whois, dns
-
-Tags field (from /v1/ip/data): is_vpn, is_cloud, is_tor, is_proxy,
-  is_hosting, is_mobile, is_darkweb, is_scanner, is_snort
+GET /v1/domain/summary — returns:
+  classification, score{score}, country, org_name, registrar, tags[]
 """
 from app.models import IOCType
 from app.parser import ParsedIOC
 from .base import BaseConnector, NormalizedResult
+from typing import ClassVar
 
 BASE = "https://api.criminalip.io/v1"
-
-# CriminalIP score labels (0-5 scale)
-SCORE_LABEL = {0: "safe", 1: "low", 2: "moderate", 3: "high", 4: "critical", 5: "critical"}
 
 
 class CriminalIPConnector(BaseConnector):
     SOURCE_NAME     = "criminalip"
     SUPPORTED_TYPES = {IOCType.ip, IOCType.domain}
+    DATA_CATEGORIES: ClassVar[set[str]] = {"host_info", "ports", "threat", "abuse"}
 
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         headers = {"x-api-key": self.api_key}
@@ -53,13 +48,10 @@ class CriminalIPConnector(BaseConnector):
             r.raise_for_status()
             data = r.json()
 
-            # Some endpoint versions wrap in {"status":"success","data":{...}}
-            # Others return fields at top level. Normalize both.
+            # Some versions wrap in {"status":"success","data":{...}}
             if isinstance(data.get("data"), dict):
-                # Preserve top-level status, merge data fields
                 inner = data["data"]
-                top_status = data.get("status", "")
-                return {**inner, "_api_status": top_status}
+                return {**inner, "_api_status": data.get("status", "")}
 
             return data
 
@@ -71,42 +63,42 @@ class CriminalIPConnector(BaseConnector):
 
         if ioc.type == IOCType.ip:
             self._normalize_ip(raw, result)
-        elif ioc.type == IOCType.domain:
+        else:
             self._normalize_domain(raw, result)
 
     def _normalize_ip(self, raw: dict, result: NormalizedResult) -> None:
-        # ── Scores (0-5 scale → normalize to 0-100) ───────────────
+        # ── Score → 0-100 ─────────────────────────────────────────
         score_obj = raw.get("score", {}) or {}
         inbound   = score_obj.get("inbound",  0) or 0
         outbound  = score_obj.get("outbound", 0) or 0
-        # CriminalIP inbound/outbound are 0-5 integers
+
         def to_pct(v):
             try:
                 v = float(v)
                 return int(v * 20) if v <= 5 else int(min(v, 100))
             except (TypeError, ValueError):
                 return 0
+
         result.abuse_score = max(to_pct(inbound), to_pct(outbound))
 
-        # ── Network info ───────────────────────────────────────────
+        # ── Host info ─────────────────────────────────────────────
         result.country = raw.get("country") or raw.get("country_code")
         result.city    = raw.get("city")
-        result.org     = (raw.get("org_name") or raw.get("as_name")
-                          or raw.get("isp"))
-        asn_raw = raw.get("as_no") or raw.get("asn", "")
-        result.asn = str(asn_raw) if asn_raw else None
+        result.org     = raw.get("org_name") or raw.get("as_name") or raw.get("isp")
+        asn_raw        = raw.get("as_no") or raw.get("asn", "")
+        result.asn     = str(asn_raw) if asn_raw else None
 
         # ── Boolean flags ─────────────────────────────────────────
-        # Both "tags" and "issues" objects have these flags
         tags_obj   = raw.get("tags",   {}) or {}
         issues_obj = raw.get("issues", {}) or {}
+
         def flag(key):
             return bool(tags_obj.get(key) or issues_obj.get(key))
 
         result.is_vpn = flag("is_vpn")
         result.is_tor = flag("is_tor")
 
-        # ── Tags (human-readable from tags/issues object) ─────────
+        # ── Tags from infrastructure flags ─────────────────────────
         tag_map = {
             "is_vpn":      "VPN",
             "is_cloud":    "Cloud",
@@ -118,21 +110,36 @@ class CriminalIPConnector(BaseConnector):
             "is_scanner":  "Scanner",
             "is_snort":    "Snort",
         }
-        result.tags = [
-            label for key, label in tag_map.items()
-            if flag(key)
-        ]
+        result.tags = [label for key, label in tag_map.items() if flag(key)]
 
-        # ── Ports from port.data array ─────────────────────────────
+        # ── Ports + services from port.data[] ─────────────────────
         port_data = (raw.get("port") or {}).get("data", []) or []
-        result.ports = []
+        result.ports    = []
+        result.services = {}
+
         for p in port_data:
-            if isinstance(p, dict):
-                port_num = p.get("port")
-                if port_num and str(port_num).isdigit():
-                    result.ports.append(int(port_num))
-            elif isinstance(p, int):
-                result.ports.append(p)
+            if not isinstance(p, dict):
+                continue
+            port_num = p.get("port")
+            if not port_num:
+                continue
+            try:
+                port_int = int(port_num)
+            except (ValueError, TypeError):
+                continue
+
+            result.ports.append(port_int)
+
+            # Build service label from app_name or protocol
+            app_name  = p.get("app_name", "")
+            app_type  = p.get("app_type", "")
+            protocol  = p.get("protocol", "") or p.get("socket", "")
+            svc_parts = [s for s in [app_name, app_type] if s and s.lower() not in ("unknown", "")]
+            if svc_parts:
+                result.services[port_int] = " / ".join(svc_parts[:2])
+            elif protocol:
+                result.services[port_int] = protocol.upper()
+
         result.ports = sorted(set(result.ports))[:15]
 
         # ── Verdict ────────────────────────────────────────────────
@@ -140,10 +147,23 @@ class CriminalIPConnector(BaseConnector):
         sc     = result.abuse_score or 0
         result.verdict_hint = (
             "malicious"  if danger or sc >= 60 else
-            "suspicious" if sc >= 40            else
-            "clean"      if sc == 0             else
+            "suspicious" if sc >= 40             else
+            "clean"      if sc == 0              else
             "unknown"
         )
+
+        # ── Reports for timeline ───────────────────────────────────
+        result.reports = []
+        if result.tags or sc > 0:
+            detail = f"Risk score {sc}/100"
+            if result.tags:
+                detail += f" · {', '.join(result.tags[:4])}"
+            result.reports.append({
+                "date":     None,
+                "summary":  f"Criminal IP — {detail}",
+                "source":   "criminalip",
+                "category": "threat" if danger else "host_info",
+            })
 
     def _normalize_domain(self, raw: dict, result: NormalizedResult) -> None:
         result.org     = raw.get("org_name") or raw.get("registrar")

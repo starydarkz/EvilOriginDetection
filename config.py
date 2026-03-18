@@ -36,10 +36,6 @@ class Settings(BaseSettings):
     abuseipdb_key_1: Optional[str] = None
     abuseipdb_key_2: Optional[str] = None
 
-    # ── GreyNoise ─────────────────────────────────────────────────────
-    greynoise_key_1: Optional[str] = None
-    greynoise_key_2: Optional[str] = None
-
     # ── Shodan ────────────────────────────────────────────────────────
     shodan_key_1: Optional[str] = None
     shodan_key_2: Optional[str] = None

@@ -52,6 +52,17 @@ async def results_page(
             norm = json.loads(sr.normalized or "{}")
         except Exception:
             norm = {}
+        # JSON serializes int dict keys as strings — restore int keys for services
+        if isinstance(norm.get("services"), dict):
+            norm["services"] = {
+                int(k): v for k, v in norm["services"].items()
+                if str(k).isdigit()
+            }
+        # Ensure new fields added in Phase 2/3 have defaults for old cached records
+        norm.setdefault("services",   {})
+        norm.setdefault("redirects",  [])
+        norm.setdefault("reports",    [])
+        norm.setdefault("http_title", None)
         sources[sr.source] = {
             "status":     sr.status.value,
             "fetched_at": sr.fetched_at.isoformat() if sr.fetched_at else None,
@@ -84,24 +95,38 @@ async def results_page(
         for src in sources.keys()
     }
 
-    # Merge and deduplicate ports + technologies from all sources
-    # Priority: Shodan > Pulsedive > CriminalIP (most reliable first)
-    merged_ports = []
-    merged_techs = []
-    seen_ports   = set()
-    seen_techs   = set()
-    port_source  = {}  # port → source name
+    # Merge and deduplicate ports + services + technologies from all sources
+    # Priority: Shodan (most detailed) > Pulsedive > CriminalIP > others
+    merged_ports    = []
+    merged_techs    = []
+    merged_services = {}   # port → {service, source}
+    seen_ports      = set()
+    seen_techs      = set()
+    port_source     = {}   # port → source name
 
     for src_priority in ["shodan", "pulsedive", "criminalip", "urlscan",
                          "securitytrails"]:
         sdata = sources.get(src_priority, {})
         if sdata.get("status") != "ok":
             continue
+        # Ports
         for p in (sdata.get("ports") or []):
             if p and p not in seen_ports:
                 seen_ports.add(p)
                 merged_ports.append(p)
                 port_source[p] = src_priority
+        # Services (port → service name)
+        for port, svc in (sdata.get("services") or {}).items():
+            try:
+                port_int = int(port)
+            except (ValueError, TypeError):
+                continue
+            if port_int not in merged_services and svc:
+                merged_services[port_int] = {
+                    "service": svc,
+                    "source":  src_priority,
+                }
+        # Technologies
         for t in (sdata.get("technologies") or []):
             tl = t.lower() if t else ""
             if t and tl not in seen_techs:
@@ -132,21 +157,111 @@ async def results_page(
             all_tags_merged.append(tag)
     all_tags_merged = all_tags_merged[:20]
 
+    # ── Unified view — canonical fields merged across all sources ──────────
+    # Template consumes these instead of source-specific dicts.
+    # Priority order is encoded per field — best source wins.
+
+    def first(*vals):
+        """Return first non-None, non-empty value."""
+        for v in vals:
+            if v is not None and v != "" and v != [] and v != {}:
+                return v
+        return None
+
+    def ok(src):
+        return sources.get(src, {}).get("status") == "ok"
+
+    sh  = sources.get("shodan",         {})
+    vt  = sources.get("virustotal",      {})
+    ab  = sources.get("abuseipdb",       {})
+    cip = sources.get("criminalip",      {})
+    pd  = sources.get("pulsedive",       {})
+    st  = sources.get("securitytrails",  {})
+    us  = sources.get("urlscan",         {})
+    mb  = sources.get("malwarebazaar",   {})
+    wmn = sources.get("whatsmyname",     {})
+    sfs = sources.get("stopforumspam",   {})
+
+    unified = {
+        # ── Network / geo ─────────────────────────────────────────
+        "country":    first(cip.get("country"), sh.get("country"),
+                            ab.get("country"),  vt.get("country"),
+                            pd.get("country")),
+        "city":       first(cip.get("city"),    sh.get("city"),
+                            pd.get("city")),
+        "org":        first(sh.get("org"),      vt.get("org"),
+                            cip.get("org"),     pd.get("org"),
+                            ab.get("org")),
+        "asn":        first(sh.get("asn"),      vt.get("asn"),
+                            cip.get("asn"),     pd.get("asn")),
+        "isp":        first(sh.get("isp"),      ab.get("isp")),
+        "network":    first(vt.get("network"),  sh.get("network")),
+        "hostnames":  first(sh.get("hostnames"), st.get("hostnames"), []),
+        "usage_type": first(ab.get("usage_type")),
+        "is_tor":     any([cip.get("is_tor"), ab.get("is_tor")]),
+        "is_vpn":     bool(cip.get("is_vpn")),
+        "latitude":   first(pd.get("latitude")),
+        "longitude":  first(pd.get("longitude")),
+
+        # ── Ports / services (already merged above) ────────────────
+        "ports":      merged_ports,
+        "services":   merged_services,
+        "port_source":port_source,
+
+        # ── Domain / web ──────────────────────────────────────────
+        "registrar":      first(pd.get("registrar"),     st.get("registrar")),
+        "creation_date":  first(pd.get("creation_date"), st.get("creation_date")),
+        "expiry_date":    first(pd.get("expiry_date"),   st.get("expiry_date")),
+        "dns_records":    first(pd.get("dns_records"),   st.get("dns_records"), {}),
+        "screenshot_url": first(us.get("screenshot_url"), pd.get("screenshot_url")),
+        "http_status":    first(us.get("http_status"),   pd.get("http_status")),
+        "http_title":     first(us.get("http_title"),    pd.get("http_title")),
+        "technologies":   merged_techs,
+        "redirects":      first(us.get("redirects"),     pd.get("redirects"), []),
+
+        # ── Threat / file ─────────────────────────────────────────
+        "malicious_count": vt.get("malicious_count", 0),
+        "total_engines":   vt.get("total_engines", 0),
+        "abuse_score":     first(ab.get("abuse_score"),  cip.get("abuse_score")),
+        "malware_family":  first(vt.get("malware_family"), mb.get("malware_family")),
+        "file_name":       first(vt.get("file_name"),    mb.get("file_name")),
+        "file_type":       first(vt.get("file_type"),    mb.get("file_type")),
+        "file_size":       first(vt.get("file_size"),    mb.get("file_size")),
+        "first_submission":first(vt.get("first_submission"), mb.get("first_submission")),
+
+        # ── Abuse / email ─────────────────────────────────────────
+        "email_reports":   sfs.get("email_reports", 0),
+        "sfs_confidence":  sfs.get("confidence"),
+        "sfs_country":     sfs.get("country"),
+        "username_hits":   wmn.get("username_hits") or [],
+        "sfs_verdict":     sfs.get("verdict_hint", "unknown"),
+        "pulse_count":     pd.get("pulse_count", 0),
+
+        # ── Source availability ───────────────────────────────────
+        "has_screenshot": bool(us.get("screenshot_url")),
+        "shodan_ok":      ok("shodan"),
+        "urlscan_ok":     ok("urlscan"),
+        "st_ok":          ok("securitytrails"),
+        "mb_ok":          ok("malwarebazaar"),
+    }
+
     return templates.TemplateResponse("results.html", {
         "request":       request,
         "ioc":           ioc,
         "tags":          all_tags_merged,
         "metadata":      metadata,
         "sources":       sources,
+        "unified":       unified,
         "timeline":      timeline,
         "history":       history,
         "geo":           geo,
         "is_cached":     is_cached,
         "cache_age_h":   cache_age_h,
         "source_links":  source_links,
-        "merged_ports":  merged_ports,
-        "merged_techs":  merged_techs,
-        "port_source":   port_source,
+        "merged_ports":    merged_ports,
+        "merged_techs":    merged_techs,
+        "merged_services": merged_services,
+        "port_source":     port_source,
     })
 
 
@@ -346,6 +461,34 @@ async def graph_data(
                         add_edge(central_id, nid, "account-on", "resolution",
                                  source_intel="whatsmyname")
 
+        # ── URLScan — IPs/domains contacted during scan ────────────
+        if src == "urlscan":
+            lists = raw.get("_lists", {}) or {}
+            for ip in (lists.get("ips") or [])[:5]:
+                if ip:
+                    nid = f"us_ip_{ip}"
+                    if add_node(nid, ip, "ip",
+                                source="urlscan",
+                                reason="IP contacted during web scan (URLScan)"):
+                        add_edge(central_id, nid, "contacted", "resolution",
+                                 source_intel="urlscan")
+            for domain in (lists.get("domains") or [])[:5]:
+                if domain:
+                    nid = f"us_dom_{domain}"
+                    if add_node(nid, domain, "domain",
+                                source="urlscan",
+                                reason="Domain contacted during web scan (URLScan)"):
+                        add_edge(central_id, nid, "contacted", "resolution",
+                                 source_intel="urlscan")
+            for fhash in (lists.get("hashes") or [])[:3]:
+                if fhash:
+                    nid = f"us_hash_{fhash[:12]}"
+                    if add_node(nid, fhash[:20] + "…", "hash",
+                                source="urlscan",
+                                reason="File hash loaded during scan (URLScan)"):
+                        add_edge(central_id, nid, "loads", "threat",
+                                 source_intel="urlscan")
+
     return {"nodes": nodes, "edges": edges}
 
 
@@ -379,167 +522,46 @@ async def rescan(
 
 def _build_timeline(ioc, sources: dict, history) -> list[dict]:
     """
-    Build timeline from ACTUAL IOC activity reported by intelligence sources.
-    Each event represents something that happened to/with this indicator,
-    not just when we queried it.
+    Build activity timeline from result.reports[] populated by each connector.
+    Each connector is responsible for extracting its own dated events.
+    We collect all, sort chronologically, and cap at 15.
     """
-    import json as _json
-    from datetime import datetime as _dt
-
     events = []
-
-    def add(date, source, label, summary, verdict="unknown", link=None):
-        if not summary:
-            return
-        events.append({
-            "date":    date,
-            "source":  source,
-            "label":   label,
-            "verdict": verdict,
-            "summary": summary,
-            "link":    link,
-        })
-
-    ioc_link = lambda src: _source_link(src, ioc.value, ioc.type.value)
 
     for src_name, data in sources.items():
         if data.get("status") != "ok":
             continue
 
-        # ── VirusTotal ────────────────────────────────────────────
-        if src_name == "virustotal":
-            # First submission date
-            first = data.get("first_submission")
-            if first:
-                ts = _epoch_to_iso(first)
-                add(ts, "virustotal", "VT",
-                    f"First submitted to VirusTotal",
-                    verdict="unknown", link=ioc_link("virustotal"))
+        # Use pre-built reports from connector normalize()
+        for rep in (data.get("reports") or []):
+            if not rep.get("summary"):
+                continue
+            events.append({
+                "date":    rep.get("date"),
+                "source":  src_name,
+                "label":   src_name.upper()[:3],
+                "verdict": data.get("verdict_hint", "unknown"),
+                "summary": rep["summary"],
+                "link":    _source_link(src_name, ioc.value, ioc.type.value),
+                "category": rep.get("category", ""),
+            })
 
-            # Last analysis
-            last = data.get("last_seen")
-            if last:
-                ts = _epoch_to_iso(last)
-                mal   = data.get("malicious_count", 0)
-                total = data.get("total_engines", 0)
-                v = "malicious" if mal >= total * 0.3 else                     "suspicious" if mal > 0 else "clean"
-                add(ts, "virustotal", "VT",
-                    f"Last analysis: {mal}/{total} engines detected",
-                    verdict=v, link=ioc_link("virustotal"))
+        # Fallback: if connector has no reports[], create one generic entry
+        if not data.get("reports"):
+            summary = _source_summary(src_name, data)
+            if summary and summary not in ("Scanned", "Not listed"):
+                ts = data.get("last_seen")
+                events.append({
+                    "date":    ts[:19] if ts else None,
+                    "source":  src_name,
+                    "label":   src_name.upper()[:3],
+                    "verdict": data.get("verdict_hint", "unknown"),
+                    "summary": summary,
+                    "link":    _source_link(src_name, ioc.value, ioc.type.value),
+                    "category": "",
+                })
 
-        # ── AbuseIPDB ─────────────────────────────────────────────
-        elif src_name == "abuseipdb":
-            # Last report date
-            last_reported = data.get("last_seen")
-            if last_reported:
-                score = data.get("abuse_score", 0)
-                tags  = data.get("tags") or []
-                cats  = ", ".join(tags[:3]) if tags else "abuse"
-                v = "malicious" if score >= 75 else "suspicious" if score >= 25 else "unknown"
-                add(last_reported[:19] if last_reported else None,
-                    "abuseipdb", "AbuseIPDB",
-                    f"Last abuse report — {score}% confidence"
-                    + (f" · {cats}" if cats else ""),
-                    verdict=v, link=ioc_link("abuseipdb"))
-
-        # ── GreyNoise ─────────────────────────────────────────────
-        elif src_name == "greynoise":
-            last = data.get("last_seen")
-            cl   = data.get("classification", "unknown")
-            if last or cl not in ("unknown", None):
-                noise = data.get("is_noise", False)
-                v = "malicious" if cl == "malicious" else                     "clean"     if cl == "benign"    else "unknown"
-                detail = cl
-                if noise:
-                    detail += " · internet scanner"
-                add(last[:19] if last else None,
-                    "greynoise", "GreyNoise",
-                    f"GreyNoise classification: {detail}",
-                    verdict=v, link=ioc_link("greynoise"))
-
-        # ── Shodan ────────────────────────────────────────────────
-        elif src_name == "shodan":
-            last = data.get("last_seen")
-            ports = data.get("ports") or []
-            if ports:
-                add(last[:10] if last else None,
-                    "shodan", "Shodan",
-                    f"Indexed by Shodan — {len(ports)} open port(s): "
-                    + ", ".join(str(p) for p in ports[:5])
-                    + ("…" if len(ports) > 5 else ""),
-                    verdict="unknown", link=ioc_link("shodan"))
-
-        # ── MalwareBazaar ─────────────────────────────────────────
-        elif src_name == "malwarebazaar":
-            first = data.get("first_submission")
-            family = data.get("malware_family") or data.get("file_name")
-            if first or family:
-                add(first[:19] if first else None,
-                    "malwarebazaar", "MalwareBazaar",
-                    f"Malware sample found"
-                    + (f" — family: {family}" if family else ""),
-                    verdict="malicious", link=ioc_link("malwarebazaar"))
-
-        # ── URLScan ───────────────────────────────────────────────
-        elif src_name == "urlscan":
-            last = data.get("last_seen")
-            http_status = data.get("http_status")
-            v = data.get("verdict_hint", "unknown")
-            if last:
-                detail = f"Scanned by URLScan"
-                if http_status:
-                    detail += f" — HTTP {http_status}"
-                techs = data.get("technologies") or []
-                if techs:
-                    detail += f" · {', '.join(techs[:2])}"
-                add(last[:19] if last else None,
-                    "urlscan", "URLScan",
-                    detail, verdict=v, link=ioc_link("urlscan"))
-
-        # ── StopForumSpam ─────────────────────────────────────────
-        elif src_name == "stopforumspam":
-            freq = data.get("email_reports") or 0
-            if freq and freq > 0:
-                v = "malicious" if freq > 10 else "suspicious"
-                add(None,  # SFS doesn't provide dates
-                    "stopforumspam", "SFS",
-                    f"Reported {freq} time(s) for forum spam",
-                    verdict=v, link=ioc_link("stopforumspam"))
-
-        # ── Pulsedive ─────────────────────────────────────────────
-        elif src_name == "pulsedive":
-            pulse_count = data.get("pulse_count") or 0
-            if pulse_count > 0:
-                v = data.get("verdict_hint", "unknown")
-                add(data.get("last_seen"),
-                    "pulsedive", "Pulsedive",
-                    f"Referenced in {pulse_count} threat feed(s)",
-                    verdict=v, link=ioc_link("pulsedive"))
-
-        # ── CriminalIP ────────────────────────────────────────────
-        elif src_name == "criminalip":
-            score = data.get("abuse_score") or 0
-            tags  = data.get("tags") or []
-            if score > 0 or tags:
-                v = data.get("verdict_hint", "unknown")
-                detail = f"Criminal IP score: {score}"
-                if tags:
-                    detail += f" · {', '.join(tags[:3])}"
-                add(None,
-                    "criminalip", "CriminalIP",
-                    detail, verdict=v, link=ioc_link("criminalip"))
-
-        # ── SecurityTrails ────────────────────────────────────────
-        elif src_name == "securitytrails":
-            created = data.get("creation_date")
-            if created:
-                add(str(created)[:10],
-                    "securitytrails", "SecurityTrails",
-                    f"Domain registered"
-                    + (f" via {data.get('registrar')}" if data.get("registrar") else ""),
-                    verdict="unknown", link=ioc_link("securitytrails"))
-
-    # Add current analysis event (always last)
+    # Current analysis event (always last)
     events.append({
         "date":    ioc.last_scan.isoformat() if ioc.last_scan else None,
         "source":  "eod",
@@ -548,17 +570,28 @@ def _build_timeline(ioc, sources: dict, history) -> list[dict]:
         "summary": f"Analysis complete — Risk score {ioc.score}/100",
         "link":    None,
         "current": True,
+        "category": "",
     })
 
-    # Sort chronologically, events without dates go after dated ones
+    # Sort: dated events chronologically, undated before "current"
     def sort_key(e):
         d = e.get("date")
-        if not d:
-            return "8888-01-01"  # undated before "current"
-        return str(d)[:19]
+        if e.get("current"):
+            return "9999-99-99"
+        return str(d)[:19] if d else "8888-01-01"
 
     events.sort(key=sort_key)
-    return events
+
+    # Deduplicate near-identical summaries from same source
+    seen = set()
+    unique = []
+    for e in events:
+        key = (e.get("source"), e.get("summary", "")[:40])
+        if key not in seen:
+            seen.add(key)
+            unique.append(e)
+
+    return unique[:15]
 
 
 def _epoch_to_iso(val) -> str | None:
@@ -585,10 +618,6 @@ def _source_summary(source: str, data: dict) -> str:
         case "abuseipdb":
             score = data.get("abuse_score", 0) or 0
             return f"{score}% abuse confidence"
-        case "greynoise":
-            cl = data.get("classification", "unknown") or "unknown"
-            noise = " · scanner" if data.get("is_noise") else ""
-            return f"{cl.capitalize()}{noise}"
         case "shodan":
             ports = data.get("ports") or []
             return f"{len(ports)} open port(s)" if ports else "Scanned"
@@ -629,8 +658,6 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
             return f"https://www.virustotal.com/gui/{vt_type}/{quote(value, safe='')}"
         case "abuseipdb":
             return f"https://www.abuseipdb.com/check/{value}"
-        case "greynoise":
-            return f"https://viz.greynoise.io/ip/{value}"
         case "shodan":
             return f"https://www.shodan.io/host/{value}"
         case "pulsedive":
@@ -658,7 +685,7 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
 def _extract_geo(sources: dict) -> dict | None:
     geo = {}
     priority = ["criminalip", "shodan", "abuseipdb", "virustotal",
-                "greynoise", "pulsedive", "securitytrails"]
+                "pulsedive", "securitytrails"]
 
     # Collect all source data in priority order
     ordered = []

@@ -19,6 +19,7 @@ BASE = "https://www.virustotal.com/api/v3"
 class VirusTotalConnector(BaseConnector):
     SOURCE_NAME     = "virustotal"
     SUPPORTED_TYPES = {IOCType.ip, IOCType.domain, IOCType.hash, IOCType.url}
+    DATA_CATEGORIES: ClassVar[set[str]] = {"threat", "reputation", "host_info", "file", "relations"}
 
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         endpoint = self._endpoint(ioc)
@@ -130,6 +131,44 @@ class VirusTotalConnector(BaseConnector):
                 attr.get("suggested_threat_label")
             )
             result.first_submission = attr.get("first_submission_date")
+
+        # ── Domain categories ─────────────────────────────────────
+        # categories{} maps source → category label (e.g. "social-network")
+        if ioc.type == IOCType.domain:
+            cats = attr.get("categories", {}) or {}
+            # Deduplicate category values across sources
+            cat_vals = list(dict.fromkeys(v for v in cats.values() if v))
+            if cat_vals:
+                result.tags = list(dict.fromkeys(result.tags + cat_vals))[:15]
+
+        # ── Reports for timeline ───────────────────────────────────
+        result.reports = []
+        first_sub = result.first_submission
+        last_mod  = result.last_seen
+
+        if first_sub:
+            ts = _epoch_to_iso(first_sub)
+            result.reports.append({
+                "date":     ts,
+                "summary":  "First submitted to VirusTotal",
+                "source":   "virustotal",
+                "category": "threat",
+            })
+
+        if last_mod and result.total_engines:
+            ts  = _epoch_to_iso(last_mod)
+            mal = result.malicious_count or 0
+            tot = result.total_engines
+            result.reports.append({
+                "date":     ts,
+                "summary":  (
+                    f"VirusTotal — {mal}/{tot} engines detected"
+                    if mal else
+                    f"VirusTotal — Clean ({tot} engines)"
+                ),
+                "source":   "virustotal",
+                "category": "threat",
+            })
 
         # Relations are stored in result.raw (via _fetch) and read
         # directly by the graph router from raw_json in the DB

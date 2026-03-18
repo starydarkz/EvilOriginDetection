@@ -28,10 +28,6 @@ services:
         sync: false
       - key: ABUSEIPDB_KEY_2
         sync: false
-      - key: GREYNOISE_KEY_1
-        sync: false
-      - key: GREYNOISE_KEY_2
-        sync: false
       - key: SHODAN_KEY_1
         sync: false
       - key: SHODAN_KEY_2
