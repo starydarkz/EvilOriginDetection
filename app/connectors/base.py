@@ -206,8 +206,15 @@ class BaseConnector(abc.ABC):
             result.error      = "Request timed out"
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
         except httpx.HTTPStatusError as exc:
-            result.status     = SourceStatus.error
-            result.error      = f"HTTP {exc.response.status_code}"
+            code = exc.response.status_code
+            # 404 = indicator not in this source's database — treat as unknown, not error
+            if code == 404:
+                result.status     = SourceStatus.ok
+                result.verdict_hint = "unknown"
+                result.error      = None
+            else:
+                result.status     = SourceStatus.error
+                result.error      = f"HTTP {code}"
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
         except Exception as exc:
             result.status     = SourceStatus.error

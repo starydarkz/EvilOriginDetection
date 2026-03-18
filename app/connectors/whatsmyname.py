@@ -10,6 +10,7 @@ to avoid hammering 30 sites simultaneously.
 import asyncio
 import httpx
 from app.models import IOCType
+from typing import ClassVar
 from app.parser import ParsedIOC
 from .base import BaseConnector, NormalizedResult
 

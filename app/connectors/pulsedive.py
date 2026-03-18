@@ -37,6 +37,7 @@ Source summary shown to user: just "X feeds" or "Scanned" — no raw field dumps
 from app.models import IOCType
 from app.parser import ParsedIOC
 from .base import BaseConnector, NormalizedResult
+from typing import ClassVar
 
 BASE = "https://pulsedive.com/api"
 
@@ -110,24 +111,28 @@ class PulsediveConnector(BaseConnector):
         )
 
         # ── Properties block ───────────────────────────────────────
-        props = raw.get("properties", {}) or {}
+        # Pulsedive can return lists instead of dicts for some fields
+        # depending on the indicator type — always check isinstance
+        raw_props = raw.get("properties")
+        props = raw_props if isinstance(raw_props, dict) else {}
 
         # Geo
-        geo = props.get("geo", {}) or {}
+        raw_geo = props.get("geo")
+        geo = raw_geo if isinstance(raw_geo, dict) else {}
         result.country   = geo.get("country")
         result.city      = geo.get("city")
         result.latitude  = geo.get("latitude")
         result.longitude = geo.get("longitude")
-        # org: prefer clean format without ASN prefix
-        org_raw = geo.get("org", "")
+        org_raw = geo.get("org", "") or ""
         if org_raw:
-            # "AS15169 GOOGLE" → strip ASN prefix
             parts = org_raw.split(" ", 1)
-            result.org = parts[1] if (len(parts) > 1 and parts[0].startswith("AS")) else org_raw
-        result.asn = geo.get("asn")  # e.g. "AS15169"
+            result.org = (parts[1] if len(parts) > 1 and parts[0].startswith("AS")
+                          else org_raw)
+        result.asn = geo.get("asn")
 
-        # Ports — [{port: 443, protocol: "TCP/SSL"}, ...]
-        port_entries = props.get("port", []) or []
+        # Ports — can be [{port:443, protocol:"TCP/SSL"}] or []
+        port_entries = props.get("port") or []
+        port_entries = port_entries if isinstance(port_entries, list) else []
         result.ports = []
         for p in port_entries:
             if isinstance(p, dict):
@@ -142,26 +147,29 @@ class PulsediveConnector(BaseConnector):
                 pass
         result.ports = sorted(set(result.ports))[:15]
 
-        # Technologies from HTTP headers (server, x-powered-by, etc.)
-        header_entries = props.get("header", []) or []
+        # Technologies from HTTP headers
+        header_entries = props.get("header") or []
+        header_entries = header_entries if isinstance(header_entries, list) else []
         techs = []
         for h in header_entries:
             if isinstance(h, dict):
                 attr = (h.get("attribute") or "").lower()
-                val  = h.get("value", "")
+                val  = h.get("value", "") or ""
                 if attr in ("server", "x-powered-by", "x-generator") and val:
                     techs.append(val[:40])
             elif isinstance(h, str) and h:
                 techs.append(h[:40])
         result.technologies = techs[:8]
 
-        # DNS records (for domains/URLs)
-        dns = props.get("dns", {}) or {}
+        # DNS records
+        raw_dns = props.get("dns")
+        dns = raw_dns if isinstance(raw_dns, dict) else {}
         if dns:
             result.dns_records = dns
 
         # WHOIS
-        whois = props.get("whois", {}) or {}
+        raw_whois = props.get("whois")
+        whois = raw_whois if isinstance(raw_whois, dict) else {}
         if whois:
             if not result.org and whois.get("org"):
                 result.org = whois["org"]
@@ -172,16 +180,20 @@ class PulsediveConnector(BaseConnector):
             if whois.get("expires"):
                 result.expiry_date   = whois["expires"]
 
-        # HTTP info (for screenshot-like data)
-        http = props.get("http", {}) or {}
+        # HTTP info
+        raw_http = props.get("http")
+        http = raw_http if isinstance(raw_http, dict) else {}
         if http.get("status"):
             result.http_status = http["status"]
+        if http.get("title"):
+            result.http_title = http["title"]
 
         # HTTP redirects
-        redirects = http.get("redirects", []) or []
+        redirects = http.get("redirects") or []
+        redirects = redirects if isinstance(redirects, list) else []
         if redirects:
-            raw["_pd_redirects"] = [
-                r.get("url", "") if isinstance(r, dict) else str(r)
+            result.redirects = [
+                (r.get("url", "") if isinstance(r, dict) else str(r))
                 for r in redirects[:5]
             ]
 

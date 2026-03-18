@@ -10,6 +10,7 @@ Extracts:
 """
 import base64
 from app.models import IOCType
+from typing import ClassVar
 from app.parser import ParsedIOC
 from .base import BaseConnector, NormalizedResult
 
