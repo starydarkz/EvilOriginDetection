@@ -1,48 +1,45 @@
 /* ═══════════════════════════════════════════════════════════════════
-   themes.css — Evil Origin Detection
-   Two themes: dark (Cosmos) and light (Forensic)
-   All colors via CSS custom properties.
+   themes.css — Evil Origin Detection v2
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── DARK: COSMOS ────────────────────────────────────────────────── */
+/* ── DARK: VOID ──────────────────────────────────────────────────── */
 body.dark {
-  --bg:           #000008;
-  --bg2:          #05050f;
-  --bg3:          #0a0a1a;
-  --surface:      rgba(14,14,32,0.72);
-  --surface-solid:#0e0e20;
-  --border:       rgba(99,102,180,0.18);
-  --border2:      rgba(99,102,180,0.35);
-  --border-hover: rgba(224,92,92,0.35);
+  --bg:           #080810;
+  --bg2:          #0d0d1c;
+  --bg3:          #12121f;
+  --bg4:          #181828;
+  --surface:      rgba(16,16,28,0.85);
+  --surface-solid:#10101c;
+  --border:       rgba(120,120,200,0.12);
+  --border2:      rgba(120,120,200,0.22);
+  --border-hover: rgba(255,85,85,0.4);
 
-  --text:         #e8eaf6;
-  --text2:        #9a9cc0;
-  --text3:        #6b6d9a;
+  --text:         #f0f0ff;
+  --text2:        #a0a0c8;
+  --text3:        #5a5a80;
 
-  --accent:       #e05c5c;
-  --accent-hover: #ff7f7f;
-  --accent-glow:  rgba(224,92,92,0.25);
-  --blue:         #7b8cde;
-  --teal:         #56cfb2;
-  --warn:         #f5a623;
-  --danger:       #e05c5c;
-  --success:      #56cfb2;
+  --accent:       #ff5555;
+  --accent2:      #ff8855;
+  --accent-glow:  rgba(255,85,85,0.2);
+  --blue:         #6699ff;
+  --purple:       #aa77ff;
+  --teal:         #44ddbb;
+  --warn:         #ffaa44;
+  --danger:       #ff5555;
+  --success:      #44ddbb;
 
-  /* Verdict colors */
-  --v-malicious:  #e05c5c;
-  --v-suspicious: #f5a623;
-  --v-clean:      #56cfb2;
-  --v-unknown:    #6b6d9a;
+  --v-malicious:  #ff5555;
+  --v-suspicious: #ffaa44;
+  --v-clean:      #44ddbb;
+  --v-unknown:    #5a5a80;
 
-  /* IOC type colors */
-  --t-ip:         #7b8cde;
-  --t-domain:     #a78bfa;
-  --t-hash:       #56cfb2;
-  --t-url:        #f5a623;
-  --t-email:      #e05c5c;
-  --t-network:    #38bdf8;
+  --t-ip:         #6699ff;
+  --t-domain:     #aa77ff;
+  --t-hash:       #44ddbb;
+  --t-url:        #ffaa44;
+  --t-email:      #ff5555;
+  --t-network:    #44aaff;
 
-  /* Backgrounds for cosmos layers */
   --cosmos-opacity: 1;
   --grid-opacity:   0;
 
@@ -50,43 +47,43 @@ body.dark {
   background: var(--bg);
 }
 
-/* ── LIGHT: FORENSIC ─────────────────────────────────────────────── */
+/* ── LIGHT ────────────────────────────────────────────────────────── */
 body.light {
-  --bg:           #f4f5fa;
-  --bg2:          #eef0f7;
-  --bg3:          #e6e8f2;
-  --surface:      rgba(255,255,255,0.95);
+  --bg:           #f2f2fa;
+  --bg2:          #eaeaf5;
+  --bg3:          #e2e2f0;
+  --bg4:          #d8d8ec;
+  --surface:      rgba(255,255,255,0.92);
   --surface-solid:#ffffff;
-  --border:       rgba(13,15,30,0.09);
-  --border2:      rgba(13,15,30,0.18);
-  --border-hover: rgba(192,57,43,0.28);
+  --border:       rgba(0,0,40,0.08);
+  --border2:      rgba(0,0,40,0.15);
+  --border-hover: rgba(200,40,40,0.3);
 
-  --text:         #0d0f1e;
-  --text2:        #4a4d6a;
-  --text3:        #6b7290;
+  --text:         #0a0a1a;
+  --text2:        #3a3a5a;
+  --text3:        #7070a0;
 
-  --accent:       #c0392b;
-  --accent-hover: #e05c5c;
-  --accent-glow:  rgba(192,57,43,0.12);
-  --blue:         #2d4acf;
-  --teal:         #0d8a6a;
-  --warn:         #c07a00;
-  --danger:       #c0392b;
-  --success:      #0d8a6a;
+  --accent:       #cc2222;
+  --accent2:      #cc5500;
+  --accent-glow:  rgba(200,40,40,0.1);
+  --blue:         #2255cc;
+  --purple:       #7744cc;
+  --teal:         #118866;
+  --warn:         #aa6600;
+  --danger:       #cc2222;
+  --success:      #118866;
 
-  /* Verdict colors */
-  --v-malicious:  #c0392b;
-  --v-suspicious: #c07a00;
-  --v-clean:      #0d8a6a;
-  --v-unknown:    #6b7290;
+  --v-malicious:  #cc2222;
+  --v-suspicious: #aa6600;
+  --v-clean:      #118866;
+  --v-unknown:    #7070a0;
 
-  /* IOC type colors */
-  --t-ip:         #2d4acf;
-  --t-domain:     #7c3aed;
-  --t-hash:       #0d8a6a;
-  --t-url:        #c07a00;
-  --t-email:      #c0392b;
-  --t-network:    #0284c7;
+  --t-ip:         #2255cc;
+  --t-domain:     #7744cc;
+  --t-hash:       #118866;
+  --t-url:        #aa6600;
+  --t-email:      #cc2222;
+  --t-network:    #1177bb;
 
   --cosmos-opacity: 0;
   --grid-opacity:   1;

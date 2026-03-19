@@ -69,7 +69,7 @@
     });
 
     cy.on('tap', 'node', evt => {
-      showPanel(evt.target.data(), evt.renderedPosition);
+      showPanel(evt.target.data());
     });
     cy.on('tap', evt => {
       if (evt.target === cy) hidePanel();
@@ -169,144 +169,130 @@
   // ── Context panel ─────────────────────────────────────────────────
   let panelEl = null;
 
-  function showPanel(d, pos) {
-    hidePanel();
-
-    const label   = d.label   || d.id   || '';
-    const type    = d.type    || '';
-    const verdict = d.verdict || 'unknown';
-    const score   = d.score   != null ? `${d.score}/100` : null;
-    const source  = d.source  || null;
-    const reason  = d.reason  || null;
+  function showPanel(d) {
+    const label      = d.label   || d.id   || '';
+    const type       = d.type    || '';
+    const verdict    = d.verdict || 'unknown';
+    const score      = d.score   != null ? d.score : null;
+    const source     = d.source  || null;
+    const reason     = d.reason  || null;
     const canAnalyze = ANALYZABLE.has(type) && !d.central;
 
-    const vColors = {
-      malicious:  'var(--v-malicious)',
-      suspicious: 'var(--v-suspicious)',
-      clean:      'var(--v-clean)',
-      unknown:    'var(--text3)',
-    };
-    const vColor = vColors[verdict] || 'var(--text3)';
+    const vColors = {malicious:'var(--v-malicious)',suspicious:'var(--v-suspicious)',clean:'var(--v-clean)',unknown:'var(--text3)'};
+    const vColor  = vColors[verdict] || 'var(--text3)';
+    const vBg     = {malicious:'rgba(255,85,85,0.12)',suspicious:'rgba(255,170,68,0.12)',clean:'rgba(68,221,187,0.1)',unknown:'rgba(90,90,128,0.1)'}[verdict]||'transparent';
+    const vBorder = {malicious:'rgba(255,85,85,0.25)',suspicious:'rgba(255,170,68,0.25)',clean:'rgba(68,221,187,0.2)',unknown:'rgba(90,90,128,0.2)'}[verdict]||'transparent';
 
+    // Use the dedicated side panel when on the results page
+    const emptyState = document.getElementById('graph-empty-state');
+    const nodeDetail = document.getElementById('graph-node-detail');
+
+    if (emptyState && nodeDetail) {
+      emptyState.style.display = 'none';
+      nodeDetail.style.display = 'block';
+      nodeDetail.innerHTML = `
+        <div style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:600;
+                    color:var(--text);margin-bottom:10px;word-break:break-all;line-height:1.3">
+          ${escHtml(label)}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+          <span style="font-size:10px;padding:2px 9px;border-radius:5px;
+                       background:${vBg};border:1px solid ${vBorder};color:${vColor};
+                       font-family:'Space Mono',monospace;letter-spacing:0.06em;text-transform:uppercase">
+            ${verdict}
+          </span>
+          <span style="font-family:'Space Mono',monospace;font-size:10px;
+                       color:var(--text3);letter-spacing:0.08em;text-transform:uppercase">
+            ${escHtml(type)}
+          </span>
+        </div>
+        ${score != null ? `
+        <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text3);
+                      letter-spacing:0.12em;text-transform:uppercase;margin-bottom:4px">Risk Score</div>
+          <div style="font-family:'Outfit',sans-serif;font-size:36px;font-weight:800;
+                      letter-spacing:-0.03em;color:${vColor}">
+            ${score}<span style="font-size:16px;color:var(--text3);font-weight:400">/100</span>
+          </div>
+        </div>` : ''}
+        ${(source || reason) ? `
+        <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          ${source ? `<div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text3);
+                                  letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Source</div>
+                      <div style="font-size:13px;color:var(--text2);margin-bottom:${reason?'12px':'0'}">${escHtml(source)}</div>` : ''}
+          ${reason ? `<div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text3);
+                                  letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Correlation</div>
+                      <div style="font-size:13px;color:var(--text2);line-height:1.6">${escHtml(reason)}</div>` : ''}
+        </div>` : ''}
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${canAnalyze ? `
+          <button onclick="graphAnalyze('${escAttr(label)}','${escAttr(type)}')"
+                  style="width:100%;padding:10px;border-radius:9px;border:none;
+                         background:var(--accent);color:#fff;cursor:pointer;
+                         font-size:14px;font-weight:600;font-family:'Outfit',sans-serif;
+                         display:flex;align-items:center;justify-content:center;gap:7px"
+                  onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            Analyze ${type}
+          </button>` : ''}
+          <button onclick="graphCopy('${escAttr(label)}')" id="graph-copy-btn"
+                  style="width:100%;padding:9px;border-radius:9px;cursor:pointer;
+                         border:1px solid var(--border);background:var(--bg2);
+                         color:var(--text2);font-size:13px;font-family:'Outfit',sans-serif;font-weight:500"
+                  onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
+            ⎘ Copy value
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    // Fallback: floating panel (for standalone /graph page)
+    hidePanel();
     panelEl = document.createElement('div');
     panelEl.id = 'graph-node-panel';
-    panelEl.style.cssText = [
-      'position:absolute',
-      'z-index:200',
-      'min-width:200px',
-      'max-width:260px',
-      'border-radius:9px',
-      'padding:14px 16px',
-      'pointer-events:all',
-      'font-family:\'JetBrains Mono\',monospace',
-      'box-shadow:0 6px 24px rgba(0,0,0,0.45)',
-      // Use CSS vars — works in both themes
-      'background:var(--surface-solid,#0e0e20)',
-      'border:0.5px solid var(--border2)',
-    ].join(';');
-
+    panelEl.style.cssText = 'position:absolute;z-index:200;min-width:200px;max-width:260px;border-radius:12px;padding:16px;pointer-events:all;background:var(--surface-solid,#0e0e20);border:1px solid var(--border2);box-shadow:0 8px 32px rgba(0,0,0,0.4)';
     panelEl.innerHTML = `
-      <!-- Value -->
-      <div style="font-size:11px;font-weight:500;
-                  color:var(--text,#e8eaf6);margin-bottom:6px;
-                  word-break:break-all;line-height:1.5">
-        ${escHtml(label)}
+      <div style="font-size:14px;font-weight:600;font-family:'Outfit',sans-serif;
+                  color:var(--text);margin-bottom:8px;word-break:break-all">${escHtml(label)}</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:${vBg};
+                     border:1px solid ${vBorder};color:${vColor};font-family:'Space Mono',monospace">${verdict}</span>
+        <span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text3)">${escHtml(type)}</span>
       </div>
-
-      <!-- Type + verdict row -->
-      <div style="display:flex;gap:6px;align-items:center;
-                  margin-bottom:${(source || reason) ? '10px' : '6px'}">
-        <span style="font-size:9px;padding:2px 7px;border-radius:3px;
-                     background:rgba(99,102,180,0.15);
-                     color:var(--blue,#7b8cde);
-                     letter-spacing:0.08em;text-transform:uppercase">
-          ${escHtml(type)}
-        </span>
-        <span style="font-size:9px;color:${vColor};font-weight:500">
-          ${verdict}${score ? ' · ' + score : ''}
-        </span>
-      </div>
-
-      <!-- Source / reason (more info) -->
-      ${source || reason ? `
-      <div style="font-size:10px;color:var(--text2,#9a9cc0);
-                  background:var(--bg3,rgba(14,14,32,0.5));
-                  border-radius:5px;padding:7px 9px;margin-bottom:10px;
-                  border:0.5px solid var(--border,rgba(99,102,180,0.18))">
-        ${source ? `<div style="color:var(--text3,#6b6d9a);font-size:9px;
-                                letter-spacing:0.1em;text-transform:uppercase;
-                                margin-bottom:3px">Source</div>
-                    <div style="margin-bottom:${reason ? '6px' : '0'}">${escHtml(source)}</div>` : ''}
-        ${reason ? `<div style="color:var(--text3,#6b6d9a);font-size:9px;
-                                letter-spacing:0.1em;text-transform:uppercase;
-                                margin-bottom:3px">Correlation</div>
-                    <div style="line-height:1.5">${escHtml(reason)}</div>` : ''}
-      </div>` : ''}
-
-      <!-- Action buttons -->
-      <div style="display:flex;flex-direction:column;gap:5px">
-        ${canAnalyze ? `
-        <button onclick="graphAnalyze('${escAttr(label)}','${escAttr(type)}')"
-                style="width:100%;padding:7px 10px;border-radius:6px;border:none;
-                       background:var(--accent,#e05c5c);color:#fff;cursor:pointer;
-                       font-size:10px;font-weight:500;letter-spacing:0.04em;
-                       display:flex;align-items:center;justify-content:center;gap:5px;
-                       font-family:'JetBrains Mono',monospace">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <circle cx="11" cy="11" r="8"/>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          Analyze ${type}
-        </button>` : ''}
-        <button onclick="graphCopy('${escAttr(label)}')"
-                id="graph-copy-btn"
-                style="width:100%;padding:6px 10px;border-radius:6px;cursor:pointer;
-                       border:0.5px solid var(--border2);background:transparent;
-                       color:var(--text3,#6b6d9a);font-size:10px;
-                       font-family:'JetBrains Mono',monospace">
-          ⎘ Copy value
-        </button>
-        ${!d.central ? `
+      ${reason ? `<div style="font-size:12px;color:var(--text3);margin-bottom:12px;padding:8px;background:var(--bg3);border-radius:6px">${escHtml(reason)}</div>` : ''}
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${canAnalyze ? `<button onclick="graphAnalyze('${escAttr(label)}','${escAttr(type)}')"
+                style="padding:8px;border-radius:7px;border:none;background:var(--accent);
+                       color:#fff;cursor:pointer;font-size:13px;font-family:'Outfit',sans-serif">
+                Analyze ${type}</button>` : ''}
+        <button onclick="graphCopy('${escAttr(label)}')" id="graph-copy-btn"
+                style="padding:7px;border-radius:7px;cursor:pointer;border:1px solid var(--border);
+                       background:transparent;color:var(--text3);font-size:12px;font-family:'Outfit',sans-serif">
+          ⎘ Copy value</button>
         <button onclick="graphClose()"
-                style="width:100%;padding:5px 10px;border-radius:6px;cursor:pointer;
-                       border:0.5px solid var(--border);background:transparent;
-                       color:var(--text3,#6b6d9a);font-size:10px;
-                       font-family:'JetBrains Mono',monospace">
-          ✕ Close
-        </button>` : ''}
-      </div>
-    `;
-
-    container.style.position = 'relative';
+                style="padding:6px;border-radius:7px;cursor:pointer;border:1px solid var(--border);
+                       background:transparent;color:var(--text3);font-size:11px;font-family:'Outfit',sans-serif">
+          ✕ Close</button>
+      </div>`;
     container.appendChild(panelEl);
-
-    // Position near click, clamped to container
-    requestAnimationFrame(() => {
-      if (!panelEl) return;
-      const cW = container.offsetWidth;
-      const cH = container.offsetHeight;
-      const pW = panelEl.offsetWidth  || 220;
-      const pH = panelEl.offsetHeight || 200;
-      const margin = 12;
-      let left = pos.x + margin;
-      let top  = pos.y - 20;
-      if (left + pW > cW - margin) left = pos.x - pW - margin;
-      if (top  + pH > cH - margin) top  = cH - pH - margin;
-      if (top  < margin) top  = margin;
-      if (left < margin) left = margin;
-      panelEl.style.left = left + 'px';
-      panelEl.style.top  = top  + 'px';
-    });
   }
 
   function hidePanel() {
     const existing = document.getElementById('graph-node-panel');
     if (existing) existing.remove();
     panelEl = null;
+    const emptyState = document.getElementById('graph-empty-state');
+    const nodeDetail = document.getElementById('graph-node-detail');
+    if (emptyState) emptyState.style.display = 'flex';
+    if (nodeDetail) nodeDetail.style.display = 'none';
   }
 
-  // ── Global handlers ───────────────────────────────────────────────
+    // ── Global handlers ───────────────────────────────────────────────
   window.graphAnalyze = function(label, type) {
     const prefixes = {
       ip:'ip=', domain:'domain=', hash:'hash=',

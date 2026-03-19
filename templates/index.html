@@ -4,132 +4,116 @@
 {% block content %}
 <div class="page-center">
 
-  <!-- HERO LOGO -->
-  <div class="anim-fade-up" style="display:flex;flex-direction:column;align-items:center;margin-bottom:32px">
-    <svg viewBox="0 0 88 88" fill="none" style="width:96px;height:96px;margin-bottom:18px;filter:drop-shadow(0 0 24px var(--accent-glow))">
-      <circle cx="44" cy="48" r="36" stroke="var(--accent)" stroke-width="0.5" stroke-dasharray="2 3" opacity="0.35"/>
+  <!-- HERO -->
+  <div class="anim-fade-up" style="text-align:center;margin-bottom:36px">
+    <svg viewBox="0 0 88 88" fill="none"
+         style="width:80px;height:80px;margin-bottom:20px;filter:drop-shadow(0 0 20px var(--accent-glow))">
+      <circle cx="44" cy="48" r="36" stroke="var(--accent)" stroke-width="0.5"
+              stroke-dasharray="2 3" opacity="0.3"/>
       <path fill="var(--accent)" opacity="0.9"
         d="M27 32 C24 26,20 22,18 14 C17 10,19 6,22 8 C24 10,23 14,24 18 C26 22,28 26,29 30Z"/>
-      <path d="M22 8 C23 12,23 16,24 20" stroke="rgba(0,0,8,0.4)" stroke-width="0.8" fill="none"/>
       <path fill="var(--accent)" opacity="0.9"
         d="M61 32 C64 26,68 22,70 14 C71 10,69 6,66 8 C64 10,65 14,64 18 C62 22,60 26,59 30Z"/>
-      <path d="M66 8 C65 12,65 16,64 20" stroke="rgba(0,0,8,0.4)" stroke-width="0.8" fill="none"/>
-      <path fill="var(--accent)" d="M21 40 C16 36,12 32,14 28 C16 30,18 34,21 38Z" opacity="0.65"/>
-      <path fill="var(--accent)" d="M67 40 C72 36,76 32,74 28 C72 30,70 34,67 38Z" opacity="0.65"/>
-      <path d="M16 50 C16 36,22 28,28 30 C32 24,38 22,44 22 C50 22,56 24,60 30 C66 28,72 36,72 50 C72 62,64 72,44 74 C24 72,16 62,16 50Z"
-            fill="var(--accent)" opacity="0.04"/>
-      <ellipse cx="44" cy="48" rx="22" ry="14" fill="rgba(0,0,8,0.5)"/>
       <path d="M22 48 C28 38,38 34,44 34 C50 34,60 38,66 48 C60 58,50 62,44 62 C38 62,28 58,22 48Z"
-            stroke="var(--accent)" stroke-width="1.2" fill="rgba(224,92,92,0.05)"/>
-      <circle cx="44" cy="48" r="10" stroke="var(--accent)" stroke-width="1.2" fill="rgba(224,92,92,0.1)"/>
-      <line x1="44" y1="38" x2="44" y2="42" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
-      <line x1="44" y1="54" x2="44" y2="58" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
-      <line x1="34" y1="48" x2="38" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
-      <line x1="50" y1="48" x2="54" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.45"/>
+            stroke="var(--accent)" stroke-width="1.2" fill="rgba(255,85,85,0.05)"/>
+      <circle cx="44" cy="48" r="10" stroke="var(--accent)" stroke-width="1.2"
+              fill="rgba(255,85,85,0.08)"/>
       <ellipse cx="44" cy="48" rx="3" ry="7" fill="var(--accent)"
-               style="animation: pupil-pulse 2.8s ease-in-out infinite"/>
-      <ellipse cx="42" cy="45" rx="1" ry="1.5" fill="rgba(255,255,255,0.22)"/>
-      <path d="M22 40 C28 34,36 32,44 33" stroke="var(--accent)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-      <path d="M66 40 C60 34,52 32,44 33" stroke="var(--accent)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-      <path d="M32 64 C36 70,42 72,44 72 C46 72,52 70,56 64"
-            stroke="var(--accent)" stroke-width="0.8" fill="none" stroke-linecap="round" opacity="0.25"/>
-      <path d="M38 68 L39 72 M44 69 L44 73 M50 68 L49 72"
-            stroke="var(--accent)" stroke-width="0.7" stroke-linecap="round" opacity="0.3"/>
-      <line x1="44" y1="10" x2="44" y2="22" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
-      <line x1="44" y1="74" x2="44" y2="82" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
-      <line x1="10" y1="48" x2="20" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
-      <line x1="68" y1="48" x2="78" y2="48" stroke="var(--accent)" stroke-width="0.6" opacity="0.25"/>
+               style="animation:pupil-pulse 2.8s ease-in-out infinite"/>
+      <ellipse cx="42" cy="45" rx="1" ry="1.5" fill="rgba(255,255,255,0.2)"/>
+      <path d="M22 40 C28 34,36 32,44 33" stroke="var(--accent)" stroke-width="1.5"
+            fill="none" stroke-linecap="round"/>
+      <path d="M66 40 C60 34,52 32,44 33" stroke="var(--accent)" stroke-width="1.5"
+            fill="none" stroke-linecap="round"/>
     </svg>
 
-    <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:36px;
-               letter-spacing:-0.03em;text-align:center;line-height:1;color:var(--text)">
+    <h1 style="font-family:'Outfit',sans-serif;font-weight:800;font-size:42px;
+               letter-spacing:-0.03em;line-height:1;color:var(--text)">
       <span style="color:var(--accent)">Evil</span> Origin Detection
     </h1>
-    <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.2em;
-              text-transform:uppercase;color:var(--text3);margin-top:8px">
+    <p style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:0.2em;
+              text-transform:uppercase;color:var(--text3);margin-top:10px">
       Threat Intelligence Correlation
     </p>
   </div>
 
   <!-- SEARCH FORM -->
   <form method="POST" action="/analyze" id="analyze-form"
-        class="anim-fade-up anim-delay-1 surface"
-        style="width:100%;max-width:600px;padding:24px;border-radius:14px">
+        class="anim-fade-up anim-delay-1"
+        style="width:100%;max-width:540px">
 
     {% if error %}
-    <div style="color:var(--danger);font-family:'JetBrains Mono',monospace;font-size:13px;
-                margin-bottom:14px;padding:10px 14px;border-radius:7px;
-                background:rgba(224,92,92,0.08);border:0.5px solid rgba(224,92,92,0.25)">
+    <div style="color:var(--danger);font-family:'Space Mono',monospace;font-size:12px;
+                margin-bottom:14px;padding:10px 14px;border-radius:9px;
+                background:rgba(255,85,85,0.08);border:1px solid rgba(255,85,85,0.2)">
       ⚠ {{ error }}
     </div>
     {% endif %}
 
-    <label style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.14em;
-                  text-transform:uppercase;color:var(--text3);display:block;margin-bottom:10px">
-      Indicator of Compromise
-      <span style="float:right;font-size:10px;opacity:0.5;letter-spacing:0.05em;text-transform:none">
-        Press <kbd style="background:var(--bg3);padding:1px 5px;border-radius:3px;border:0.5px solid var(--border)">/</kbd> to focus
-      </span>
-    </label>
-
-    <textarea name="ioc_input" id="ioc-input" class="ioc-textarea" rows="4"
-      placeholder="Paste an IP, domain, hash, URL or email…"
-      oninput="updateCounter(this)"
-    ></textarea>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;gap:12px">
-      <span id="ioc-counter" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3)">
-        0 indicators detected
-      </span>
-      <button type="submit" class="btn btn-primary" id="analyze-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+    <div style="position:relative">
+      <textarea name="ioc_input" id="ioc-input" class="ioc-input-field" rows="1"
+        placeholder="IP, domain, hash, URL or email…"
+        style="padding-right:130px;min-height:54px;max-height:120px"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button type="submit" class="btn btn-primary" id="analyze-btn"
+              style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                     padding:8px 18px;font-size:14px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
         Analyze
-        <span style="font-size:10px;opacity:0.6;margin-left:4px">⌘↵</span>
       </button>
     </div>
 
-    <!-- Prefix chips -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:14px;
-                border-top:0.5px solid var(--border)">
-      <span style="font-size:11px;color:var(--text3);align-self:center;margin-right:2px">Prefix:</span>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('ip=')">ip=</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('domain=')">domain=</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('hash=')">hash=</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('url=')">url=</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('mail=')">mail=</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="insertPrefix('red=')">red=</button>
+    <!-- Type quick-select -->
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">
+      <span style="font-size:12px;color:var(--text3);align-self:center;
+                   font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.1em">
+        TYPE:
+      </span>
+      {% for prefix, label in [('ip=','IP'),('domain=','Domain'),('hash=','Hash'),
+                                ('url=','URL'),('mail=','Email')] %}
+      <button type="button" class="btn btn-ghost btn-sm"
+              onclick="insertPrefix('{{ prefix }}')"
+              style="font-family:'Space Mono',monospace;font-size:10px;
+                     letter-spacing:0.08em;padding:4px 10px">
+        {{ label }}
+      </button>
+      {% endfor %}
     </div>
   </form>
 
-  <!-- HELP COLLAPSIBLE -->
-  <div class="anim-fade-up anim-delay-2" style="width:100%;max-width:600px;margin-top:12px">
-    <button class="collapse-toggle" onclick="toggleHelp()">
-      <span>⊙ Syntax reference &amp; examples</span>
-      <span class="collapse-chevron" id="help-chev">▶</span>
+  <!-- COLLAPSIBLE HELP -->
+  <div class="anim-fade-up anim-delay-2"
+       style="width:100%;max-width:540px;margin-top:16px">
+    <button class="collapse-toggle" onclick="toggleHelp()" style="font-size:12px">
+      <span style="font-family:'Space Mono',monospace;font-size:10px;
+                   letter-spacing:0.1em;text-transform:uppercase">
+        Syntax & examples
+      </span>
+      <span class="collapse-chevron" id="help-chev">▼</span>
     </button>
     <div class="collapse-body" id="help-body">
-      <div class="surface" style="padding:18px;border-radius:10px;margin-top:4px">
+      <div class="surface" style="padding:18px;border-radius:12px;margin-top:6px">
 
-        <div class="section-label">Input formats</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-          {% for prefix, example, desc in [
-            ('ip=',     'ip=185.220.101.47',                    'IPv4 or IPv6 address'),
-            ('red=',    'red=192.168.0.0/24',                   'CIDR network range'),
-            ('domain=', 'domain=malicious-cdn.net',             'Domain or subdomain'),
-            ('hash=',   'hash=d41d8cd98f00b204e9800998ecf8427e','MD5 / SHA1 / SHA256 / SHA512'),
-            ('url=',    'url=https://evil.com/payload.exe',     'Full URL (http/https)'),
-            ('mail=',   'mail=phish@spoofed-domain.com',        'Email address'),
+        <div class="section-label" style="margin-bottom:8px">Formats</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+          {% for example, desc in [
+            ('185.220.101.47',                    'IP address'),
+            ('malicious-cdn.net',                  'Domain'),
+            ('d41d8cd98f00b204e9800998ecf8427e',  'MD5 / SHA256'),
+            ('https://evil.com/payload.exe',       'Full URL'),
+            ('phish@spoofed-domain.com',           'Email'),
           ] %}
-          <div style="display:flex;align-items:baseline;gap:12px">
+          <div style="display:flex;align-items:center;gap:10px">
             <code onclick="fillExample('{{ example }}')"
-                  style="font-family:'JetBrains Mono',monospace;font-size:12px;
-                         padding:3px 10px;border-radius:4px;cursor:pointer;
-                         background:var(--bg3);border:0.5px solid var(--border);
-                         color:var(--blue);transition:opacity 0.15s;white-space:nowrap"
-                  onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">
-              {{ example[:42] }}{% if example|length > 42 %}…{% endif %}
+                  style="font-family:'Space Mono',monospace;font-size:11px;
+                         padding:3px 10px;border-radius:5px;cursor:pointer;
+                         background:var(--bg3);border:1px solid var(--border);
+                         color:var(--blue);white-space:nowrap;flex-shrink:0">
+              {{ example[:36] }}{% if example|length > 36 %}…{% endif %}
             </code>
             <span style="color:var(--text3);font-size:13px">{{ desc }}</span>
           </div>
@@ -137,37 +121,19 @@
         </div>
 
         <div class="divider"></div>
-        <div class="section-label">Keyboard shortcuts</div>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
-          {% for keys, action in [
-            ('/ or Ctrl+L', 'Focus input field'),
-            ('Ctrl+Enter or ⌘+Enter', 'Submit analysis'),
-            ('Escape', 'Clear input'),
-          ] %}
-          <div style="display:flex;align-items:center;gap:12px;font-size:13px">
-            <code style="font-family:'JetBrains Mono',monospace;font-size:11px;
-                         padding:2px 8px;border-radius:4px;
-                         background:var(--bg3);border:0.5px solid var(--border);
-                         color:var(--text2);white-space:nowrap">{{ keys }}</code>
-            <span style="color:var(--text3)">{{ action }}</span>
-          </div>
-          {% endfor %}
-        </div>
-
-        <div class="divider"></div>
-        <div class="section-label">Active sources</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div class="section-label" style="margin-bottom:8px">Sources</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
           {% for src in ['VirusTotal','AbuseIPDB','Shodan','Pulsedive',
-                         'Criminal IP','MalwareBazaar','URLScan.io','SecurityTrails',
-                         'StopForumSpam'] %}
+                         'Criminal IP','MalwareBazaar','URLScan.io',
+                         'SecurityTrails','StopForumSpam','WhatsMyName'] %}
           <span class="source-pill ok">{{ src }}</span>
           {% endfor %}
         </div>
 
         <div class="divider"></div>
-        <p style="font-size:13px;line-height:1.7;color:var(--text2)">
-          One indicator per line — prefixes are optional, type is auto-detected.
-          Results cached for <span class="mono" style="color:var(--text)">24h</span>.
+        <p style="font-size:13px;color:var(--text3);line-height:1.6">
+          Type auto-detected · prefixes optional ·
+          results cached <span class="mono" style="color:var(--text2)">24h</span>
         </p>
       </div>
     </div>
@@ -177,5 +143,32 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/app.js"></script>
+<script>
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+function insertPrefix(p) {
+  const el = document.getElementById('ioc-input');
+  if (el) { el.value = p; el.focus(); el.setSelectionRange(p.length, p.length); }
+}
+function fillExample(v) {
+  const el = document.getElementById('ioc-input');
+  if (el) { el.value = v; el.focus(); autoResize(el); }
+}
+function toggleHelp() {
+  const b = document.getElementById('help-body');
+  const c = document.getElementById('help-chev');
+  const open = b.classList.toggle('open');
+  c.textContent = open ? '▲' : '▼';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement.tagName !== 'TEXTAREA') {
+    e.preventDefault(); document.getElementById('ioc-input')?.focus();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    document.getElementById('analyze-form')?.submit();
+  }
+});
+</script>
 {% endblock %}

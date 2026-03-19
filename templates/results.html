@@ -4,12 +4,7 @@
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
-.results-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
-.results-main { display: flex; flex-direction: column; gap: 16px; }
-.results-side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 66px; }
-.section-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 18px 20px; }
-.section-card-title { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text3); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
-.section-card-title::after { content:''; flex:1; height:0.5px; background:var(--border); }
+/* results-specific overrides */
 
 /* Score gauge */
 .score-gauge-wrap { display:flex; align-items:center; gap:20px; }
@@ -19,15 +14,15 @@
 .score-row-label { width:100px; color:var(--text3); flex-shrink:0; }
 .score-row-bar { flex:1; height:5px; border-radius:3px; background:var(--bg3); overflow:hidden; }
 .score-row-fill { height:100%; border-radius:3px; transition:width 0.7s cubic-bezier(0.4,0,0.2,1); }
-.score-row-val { width:72px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text3); flex-shrink:0; }
+.score-row-val { width:72px; text-align:right; font-family:'Space Mono',monospace; font-size:12px; color:var(--text3); flex-shrink:0; }
 
 /* Source rows */
-.source-row { display:flex; align-items:center; padding:8px 10px; border-radius:7px; background:var(--bg3); border:0.5px solid var(--border); margin-bottom:6px; gap:10px; transition:border-color 0.15s; }
+.source-row { display:flex; align-items:center; padding:8px 10px; border-radius:7px; background:var(--bg3); border:1px solid var(--border); margin-bottom:6px; gap:10px; transition:border-color 0.15s; }
 .source-row:hover { border-color:var(--border2); }
 .source-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-.source-name { font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text); width:120px; flex-shrink:0; }
+.source-name { font-family:'Space Mono',monospace; font-size:13px; color:var(--text); width:120px; flex-shrink:0; }
 .source-summary { flex:1; font-size:13px; color:var(--text2); }
-.source-link { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--blue); text-decoration:none; flex-shrink:0; transition:color 0.15s; }
+.source-link { font-family:'Space Mono',monospace; font-size:12px; color:var(--blue); text-decoration:none; flex-shrink:0; transition:color 0.15s; }
 .source-link:hover { color:var(--accent); }
 .source-row.no-key { opacity:0.4; }
 .source-row.error  { opacity:0.6; }
@@ -36,8 +31,8 @@
 .tags-wrap { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
 
 /* Tech info tabs */
-.tab-nav { display:flex; gap:2px; margin-bottom:14px; border-bottom:0.5px solid var(--border); padding-bottom:0; }
-.tab-btn { font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.08em; padding:6px 12px; background:none; border:none; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+.tab-nav { display:flex; gap:2px; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:0; }
+.tab-btn { font-family:'Space Mono',monospace; font-size:12px; letter-spacing:0.08em; padding:6px 12px; background:none; border:none; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
 .tab-btn:hover { color:var(--text); }
 .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
 .tab-panel { display:none; }
@@ -45,13 +40,13 @@
 
 /* Geo */
 .geo-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-#geo-map { width:100%; height:170px; border-radius:8px; overflow:hidden; border:0.5px solid var(--border); background:var(--bg3); }
+#geo-map { width:100%; height:170px; border-radius:8px; overflow:hidden; border:1px solid var(--border); background:var(--bg3); }
 
 /* Graph tooltip */
-#graph-tooltip { display:none; position:absolute; top:12px; right:12px; z-index:10; background:var(--surface-solid); border:0.5px solid var(--border2); border-radius:8px; padding:12px 14px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
+#graph-tooltip { display:none; position:absolute; top:12px; right:12px; z-index:10; background:var(--surface-solid); border:1px solid var(--border2); border-radius:8px; padding:12px 14px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
 
 /* Rescan / cache status */
-.cache-bar { display:flex; align-items:center; gap:10px; padding:8px 14px; border-radius:7px; background:var(--bg3); border:0.5px solid var(--border); font-size:13px; color:var(--text3); margin-bottom:16px; }
+.cache-bar { display:flex; align-items:center; gap:10px; padding:8px 14px; border-radius:7px; background:var(--bg3); border:1px solid var(--border); font-size:13px; color:var(--text3); margin-bottom:16px; }
 .cache-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 .cache-dot.live   { background:var(--teal); box-shadow:0 0 5px var(--teal); }
 .cache-dot.cached { background:var(--blue); }
@@ -135,11 +130,11 @@
             style="transition:stroke-dasharray 0.8s ease"
             opacity="0.85"/>
           <text x="40" y="37" text-anchor="middle" dominant-baseline="central"
-                style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px;fill:var(--v-{{ verdict }})">
+                style="font-family:'Outfit',sans-serif;font-weight:800;font-size:14px;fill:var(--v-{{ verdict }})">
             {{ score }}
           </text>
           <text x="40" y="52" text-anchor="middle"
-                style="font-family:'JetBrains Mono',monospace;font-size:7px;fill:var(--text3)">
+                style="font-family:'Space Mono',monospace;font-size:7px;fill:var(--text3)">
             /100
           </text>
         </svg>
@@ -230,604 +225,104 @@
     </div>
 
     {# ══ SECTION 5: CORRELATION GRAPH ══ #}
-    <div class="section-card anim-fade-up anim-delay-2">
-      <div class="section-card-title">⑤ Correlation Graph</div>
-      <div id="graph-container" data-ioc-id="{{ ioc.id }}" style="height:320px;position:relative">
-        <div class="graph-empty">
-          <span style="font-size:32px;opacity:0.2">◎</span>
-          <span style="font-size:11px">Loading graph...</span>
-        </div>
-        {# Tooltip panel #}
-        <div id="graph-tooltip">
-          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:var(--text);margin-bottom:6px" id="tt-label"></div>
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-            <span class="ioc-type" id="tt-type-badge"></span>
-            <span class="badge" id="tt-verdict-badge"></span>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-bottom:8px">
-            Score: <span id="tt-score" class="mono" style="color:var(--text)"></span>
-          </div>
-          <button id="tt-analyze" class="btn btn-primary btn-sm" style="display:none;width:100%;justify-content:center">
-            → Analyze
-          </button>
-        </div>
-      </div>
-      <p style="font-size:10px;color:var(--text3);margin-top:8px">
-        Click any node for details · Click expand to load related artifacts
-      </p>
-    </div>
-
-    {# ══ SECTION 6: TIMELINE ══ #}
-    <div class="section-card anim-fade-up anim-delay-3">
-      <div class="section-card-title">⑥ Activity Timeline</div>
-      {% if timeline %}
-      <ul class="timeline">
-        {% for event in timeline %}
-        <li class="timeline-item {{ event.verdict }}{% if event.get('current') %} current{% endif %}">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span style="font-size:12px;color:var(--text)">{{ event.summary }}</span>
-            {% if event.link %}
-            <a class="timeline-src-badge" href="{{ event.link }}" target="_blank" rel="noopener">
-              ↗ {{ event.label }}
-            </a>
-            {% else %}
-            <span class="timeline-src-badge" style="cursor:default">{{ event.label }}</span>
-            {% endif %}
-          </div>
-          {% if event.date %}
-          <span class="timeline-time">
-            {{ event.date[:19].replace('T', ' ') if event.date else '' }}
-          </span>
-          {% endif %}
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p style="font-size:11px;color:var(--text3)">No timeline events available.</p>
-      {% endif %}
-    </div>
-
-    {# ══ SECTION 7: TECHNICAL INFO ══ #}
-    <div class="section-card anim-fade-up anim-delay-4">
-      <div class="section-card-title">⑦ Technical Information</div>
-
-      {# Tab navigation — shown conditionally per IOC type #}
-      <div class="tab-nav">
-        {% if ioc.type.value in ['ip'] %}
-        <button class="tab-btn active" onclick="switchTab('tab-network', this)">Network</button>
-        <button class="tab-btn" onclick="switchTab('tab-ports', this)">Ports</button>
-        {% endif %}
-        {% if ioc.type.value in ['ip','domain','url','email'] %}
-        <button class="tab-btn {% if ioc.type.value not in ['ip'] %}active{% endif %}"
-                onclick="switchTab('tab-whois', this)">WHOIS</button>
-        {% endif %}
-        {% if ioc.type.value in ['domain','url','email'] %}
-        <button class="tab-btn" onclick="switchTab('tab-dns', this)">DNS</button>
-        {% endif %}
-        {% if ioc.type.value in ['domain','url'] %}
-        <button class="tab-btn" onclick="switchTab('tab-screenshot', this)">Screenshot</button>
-        {% endif %}
-        {% if ioc.type.value == 'hash' %}
-        <button class="tab-btn active" onclick="switchTab('tab-file', this)">File Info</button>
-        {% endif %}
-        {% if ioc.type.value == 'email' %}
-        <button class="tab-btn" onclick="switchTab('tab-email', this)">Email OSINT</button>
-        {% endif %}
-      </div>
-
-      {# ── TAB: NETWORK (IP only) ── #}
-      {% if ioc.type.value == 'ip' %}
-      <div class="tab-panel active" id="tab-network">
-        <table class="info-table">
-          <tr><td>IP</td><td>{{ ioc.value }}</td></tr>
-          {% if unified.hostnames %}
-          <tr><td>PTR / rDNS</td><td>{{ unified.hostnames | join(', ') }}</td></tr>
-          {% endif %}
-          {% if unified.asn %}
-          <tr><td>ASN</td><td>{{ unified.asn }}</td></tr>
-          {% endif %}
-          {% if unified.org %}
-          <tr><td>Organization</td><td>{{ unified.org }}</td></tr>
-          {% endif %}
-          {% if unified.isp %}
-          <tr><td>ISP</td><td>{{ unified.isp }}</td></tr>
-          {% endif %}
-          {% if unified.network %}
-          <tr><td>Network</td><td>{{ unified.network }}</td></tr>
-          {% endif %}
-          {% if unified.country %}
-          <tr><td>Country</td><td>{{ unified.country }}</td></tr>
-          {% endif %}
-          {% if unified.city %}
-          <tr><td>City</td><td>{{ unified.city }}</td></tr>
-          {% endif %}
-          {% if unified.usage_type %}
-          <tr><td>Usage Type</td><td>{{ unified.usage_type }}</td></tr>
-          {% endif %}
-
-          {# ── Network classification flags — always shown ─────── #}
-          {# Tri-state: True=confirmed / False=confirmed-not / None=unknown #}
-          {% for flag_label, flag_val in [
-            ('Tor Exit Node', unified.is_tor),
-            ('VPN',           unified.is_vpn),
-            ('Proxy',         unified.is_proxy),
-            ('Hosting / DC',  unified.is_hosting),
-            ('Scanner',       unified.is_scanner),
-            ('Mobile',        unified.is_mobile),
-            ('Darkweb',       unified.is_darkweb),
-          ] %}
-          {% if flag_val is not none %}
-          <tr>
-            <td>{{ flag_label }}</td>
-            <td {% if flag_val %}style="color:var(--v-malicious);font-weight:500"
-                {% else %}style="color:var(--v-clean)"{% endif %}>
-              {{ 'Yes' if flag_val else 'No' }}
-            </td>
-          </tr>
-          {% endif %}
-          {% endfor %}
-          {# If no source checked any flag, show a generic row #}
-          {% if unified.is_tor is none and unified.is_vpn is none and unified.is_proxy is none %}
-          <tr><td>VPN / Tor / Proxy</td><td style="color:var(--text3)">Not checked</td></tr>
-          {% endif %}
-
-          {% if unified.technologies %}
-          <tr><td>Technologies</td><td>{{ unified.technologies | join(', ') }}</td></tr>
-          {% endif %}
-        </table>
-      </div>
-
-      {# ── TAB: PORTS (IP only) ── #}
-      <div class="tab-panel" id="tab-ports">
-        {% if merged_ports %}
-        <table class="port-table">
-          <thead>
-            <tr><th>Port</th><th>Service</th><th>Source</th></tr>
-          </thead>
-          <tbody>
-            {% for port in merged_ports %}
-            {% set svc_info = merged_services.get(port, {}) %}
-            {% set svc_name = svc_info.get('service', '') %}
-            <tr>
-              <td class="{% if port in [4444,8080,8888,1337,31337,9001,6667,4899] %}port-warn{% endif %}"
-                  style="font-family:'JetBrains Mono',monospace;font-weight:500">
-                {{ port }}
-              </td>
-              <td style="font-family:'JetBrains Mono',monospace;font-size:12px">
-                {% if svc_name %}{{ svc_name }}
-                {% elif port == 21 %}FTP
-                {% elif port == 22 %}SSH
-                {% elif port == 23 %}Telnet
-                {% elif port == 25 %}SMTP
-                {% elif port == 53 %}DNS
-                {% elif port == 80 %}HTTP
-                {% elif port == 110 %}POP3
-                {% elif port == 143 %}IMAP
-                {% elif port in [443,8443] %}HTTPS
-                {% elif port in [465,587] %}SMTP/S
-                {% elif port == 993 %}IMAPS
-                {% elif port == 995 %}POP3S
-                {% elif port == 1433 %}MSSQL
-                {% elif port == 3306 %}MySQL
-                {% elif port == 3389 %}RDP
-                {% elif port == 5432 %}PostgreSQL
-                {% elif port == 5900 %}VNC
-                {% elif port == 6379 %}Redis
-                {% elif port in [8080,8888] %}HTTP-alt
-                {% elif port == 9200 %}Elasticsearch
-                {% elif port == 27017 %}MongoDB
-                {% elif port in [4444,1337,31337,9001,6667] %}⚠ Suspicious
-                {% else %}—{% endif %}
-              </td>
-              <td style="font-size:12px;color:var(--text3)">
-                {{ port_source.get(port, '') | capitalize }}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <p style="font-size:13px;color:var(--text3)">
-          {% if not unified.shodan_ok and sources.get('criminalip', {}).get('status') != 'ok' %}
-          Shodan and Criminal IP keys not configured.
-          {% else %}
-          No open ports found.
-          {% endif %}
-        </p>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {# ── TAB: WHOIS ── #}
-      <div class="tab-panel {% if ioc.type.value not in ['ip'] %}active{% endif %}" id="tab-whois">
-        {% if unified.registrar or unified.creation_date or unified.expiry_date or unified.hostnames %}
-        <table class="info-table">
-          {% if unified.registrar %}
-          <tr><td>Registrar</td><td>{{ unified.registrar }}</td></tr>
-          {% endif %}
-          {% if unified.creation_date %}
-          <tr><td>Created</td><td>{{ unified.creation_date }}</td></tr>
-          {% endif %}
-          {% if unified.expiry_date %}
-          <tr><td>Expires</td><td>{{ unified.expiry_date }}</td></tr>
-          {% endif %}
-          {% if unified.hostnames %}
-          <tr><td>Resolves to</td><td>{{ unified.hostnames | join(', ') }}</td></tr>
-          {% endif %}
-        </table>
-        {% else %}
-        <p style="font-size:13px;color:var(--text3)">
-          {% if not unified.st_ok %}WHOIS data unavailable — SecurityTrails key not configured.
-          {% else %}No WHOIS data found.{% endif %}
-        </p>
-        {% endif %}
-      </div>
-
-      {# ── TAB: DNS ── #}
-      {% if ioc.type.value in ['domain','url','email'] %}
-      <div class="tab-panel" id="tab-dns">
-        {% if unified.dns_records %}
-        {% for record_type, records in unified.dns_records.items() %}
-        <div style="margin-bottom:12px">
-          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.12em;
-                      text-transform:uppercase;color:var(--text3);margin-bottom:5px">
-            {{ record_type }} Records
-          </div>
-          {# records can be: dict with 'values' key, or a list directly #}
-          {% if records is mapping %}
-            {% set rec_list = (records.get('values') or [])[:8] %}
-          {% else %}
-            {% set rec_list = (records or [])[:8] %}
-          {% endif %}
-          {% for rec in rec_list %}
-          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);
-                      padding:3px 8px;background:var(--bg3);border-radius:4px;margin-bottom:3px">
-            {% if rec is mapping %}
-              {{ rec.get('ip') or rec.get('value') or rec.get('address') or rec | string }}
-            {% else %}
-              {{ rec | string }}
-            {% endif %}
-          </div>
-          {% endfor %}
-        </div>
-        {% endfor %}
-        {% else %}
-        <p style="font-size:13px;color:var(--text3)">DNS records unavailable.</p>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {# ── TAB: SCREENSHOT ── #}
-      {% if ioc.type.value in ['domain','url'] %}
-      <div class="tab-panel" id="tab-screenshot">
-        {% if unified.screenshot_url %}
-        <div class="screenshot-frame" style="position:relative">
-          <img src="{{ unified.screenshot_url }}"
-               alt="Screenshot of {{ ioc.value }}"
-               style="width:100%;border-radius:6px;display:block"
-               onerror="this.style.display='none';document.getElementById('ss-fallback').style.display='flex'">
-          <div id="ss-fallback" style="display:none;align-items:center;justify-content:center;
-               height:120px;color:var(--text3);font-size:13px;flex-direction:column;gap:8px">
-            <span>Screenshot could not load</span>
-            <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
-               style="font-size:11px;color:var(--text3);text-decoration:underline">
-              Open directly ↗
-            </a>
-          </div>
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          {% if unified.http_status %}
-          <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
-            HTTP {{ unified.http_status }}
-          </span>
-          {% endif %}
-          {% if unified.http_title %}
-          <span style="font-size:12px;color:var(--text2)">
-            "{{ unified.http_title[:60] }}"
-          </span>
-          {% endif %}
-          <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
-             style="margin-left:auto;font-size:11px;color:var(--text3)">
-            Full screenshot ↗
-          </a>
-        </div>
-        {% if unified.technologies %}
-        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">
-          {% for tech in unified.technologies[:8] %}
-          <span style="font-size:11px;padding:2px 8px;background:var(--bg3);
-                       border-radius:4px;border:0.5px solid var(--border);
-                       color:var(--text2)">{{ tech }}</span>
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% if unified.redirects %}
-        <div style="margin-top:8px;font-size:11px;color:var(--text3)">
-          Redirects: {% for r in unified.redirects[:3] %}
-            <span style="font-family:'JetBrains Mono',monospace">{{ r[:60] }}</span>
-            {% if not loop.last %} → {% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% else %}
-        <div style="display:flex;align-items:center;justify-content:center;
-             height:100px;color:var(--text3);font-size:13px;flex-direction:column;gap:6px">
-          <span>{% if not unified.urlscan_ok %}URLScan.io key not configured
-                {% else %}No screenshot available{% endif %}</span>
-          {% if unified.urlscan_ok %}
-          <span style="font-size:11px">URLScan found no scans for this indicator</span>
-          {% endif %}
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {# ── TAB: FILE INFO (hash only) ── #}
-      {% if ioc.type.value == 'hash' %}
-      <div class="tab-panel active" id="tab-file">
-        <table class="info-table">
-          {% if unified.file_name %}
-          <tr><td>File Name</td><td>{{ unified.file_name }}</td></tr>
-          {% endif %}
-          {% if unified.file_type %}
-          <tr><td>File Type</td><td>{{ unified.file_type }}</td></tr>
-          {% endif %}
-          {% if unified.file_size %}
-          <tr><td>File Size</td><td>{{ unified.file_size }} bytes</td></tr>
-          {% endif %}
-          {% if unified.malware_family %}
-          <tr>
-            <td>Malware Family</td>
-            <td style="color:var(--v-malicious)">{{ unified.malware_family }}</td>
-          </tr>
-          {% endif %}
-          {% if unified.first_submission %}
-          <tr><td>First Seen</td>
-          <td>{% set fs = unified.first_submission %}
-          {% if fs is number %}{{ (fs | string)[:10] }}{% else %}{{ fs | string | truncate(19, killwords=True, end='') }}{% endif %}
-          </td></tr>
-          {% endif %}
-          <tr><td>Hash</td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all">{{ ioc.value }}</td></tr>
-        </table>
-        {% if unified.mb_ok %}
-        <p style="font-size:13px;color:var(--v-malicious);margin-top:8px">
-          ⚠ Found in MalwareBazaar — confirmed malware sample
-        </p>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {# ── TAB: EMAIL OSINT ── #}
-      {% if ioc.type.value == 'email' %}
-      <div class="tab-panel active" id="tab-email">
-        {% if unified.email_reports %}
-        <div style="margin-bottom:12px">
-          <div class="section-card-title" style="margin-bottom:8px">StopForumSpam</div>
-          <table class="info-table">
-            <tr><td>Reports</td><td>{{ unified.email_reports }}</td></tr>
-            <tr>
-              <td>Status</td>
-              <td style="color:var(--v-{{ unified.sfs_verdict }})">
-                {{ unified.sfs_verdict | capitalize }}
-              </td>
-            </tr>
-            {% if unified.sfs_confidence %}
-            <tr><td>Confidence</td><td>{{ unified.sfs_confidence | int }}%</td></tr>
-            {% endif %}
-            {% if unified.sfs_country %}
-            <tr><td>Origin country</td><td>{{ unified.sfs_country }}</td></tr>
-            {% endif %}
-          </table>
-          {# Associated emails from spam submissions — only for IP analysis #}
-          {% set assoc = unified.sfs_assoc_emails | selectattr('summary', 'defined') | list %}
-          {% set email_reports = assoc | selectattr('category', 'equalto', 'abuse') | list %}
-          {% if email_reports %}
-          <div style="margin-top:10px">
-            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;
-                        text-transform:uppercase;letter-spacing:0.08em">
-              Associated emails in submissions
-            </div>
-            {% for rep in email_reports[:8] %}
-            {% set email_val = rep.summary | replace('Spam submission from ', '') | truncate(60, True, '') %}
-            <div style="display:flex;align-items:center;gap:8px;padding:4px 0;
-                        border-bottom:0.5px solid var(--border);font-size:12px">
-              <span style="font-family:'JetBrains Mono',monospace;color:var(--v-suspicious)">
-                {{ rep.summary | truncate(80, True, '…') }}
-              </span>
-              {% if rep.date %}
-              <span style="color:var(--text3);font-size:10px;margin-left:auto">{{ rep.date[:10] }}</span>
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div>
-          {% endif %}
-        </div>
-        {% endif %}
-        {% if unified.username_hits %}
-        <div class="divider"></div>
-        <div class="section-card-title" style="margin-bottom:8px">
-          WhatsMyName — {{ unified.username_hits | length }} platform(s) found
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:5px">
-          {% for hit in unified.username_hits %}
-          <a href="{{ hit.url }}" target="_blank" rel="noopener" class="source-pill ok">
-            {{ hit.site }}
-          </a>
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% if not unified.email_reports and not unified.username_hits %}
-        <p style="font-size:13px;color:var(--text3)">No email OSINT data found.</p>
-        {% endif %}
-      </div>
-      {% endif %}
-
-    </div>{# end section-card tech info #}
-
-  </div>{# end results-main #}
-
-  {# ══ RIGHT SIDEBAR ══ #}
-  <div class="results-side">
-
-    {# ══ SECTION 3: SOURCES ══ #}
-    <div class="section-card anim-fade-up anim-delay-2">
-      <div class="section-card-title">③ Intelligence Sources</div>
-
-      {% set source_meta = [
-        ('virustotal',    'VirusTotal'),
-        ('abuseipdb',     'AbuseIPDB'),
-        ('shodan',        'Shodan'),
-        ('pulsedive',     'Pulsedive'),
-        ('criminalip',    'Criminal IP'),
-        ('malwarebazaar', 'MalwareBazaar'),
-        ('urlscan',       'URLScan.io'),
-        ('securitytrails','SecurityTrails'),
-        ('stopforumspam', 'StopForumSpam'),
-        ('whatsmyname',   'WhatsMyName'),
-      ] %}
-
-      {% for src_key, src_label in source_meta %}
-        {% set src    = sources.get(src_key, {}) %}
-        {% set status = src.get('status', 'skipped') %}
-        {% set hint   = src.get('verdict_hint') or 'unknown' %}
-        {% set active = status == 'ok' %}
-        {% set dimmed = status in ('skipped', 'no_key') %}
-
-        {# ── Summary text per source ─────────────────────────── #}
-        {% if active %}
-          {% if src_key == 'virustotal' %}
-            {% set summary = src.get('malicious_count',0)|string ~ '/' ~ src.get('total_engines',0)|string ~ ' engines flagged' %}
-          {% elif src_key == 'abuseipdb' %}
-            {% set summary = 'Abuse score ' ~ src.get('abuse_score',0)|string ~ '%' %}
-          {% elif src_key == 'shodan' %}
-            {% set n = (src.get('ports') or []) | length %}
-            {% set summary = n|string ~ ' open port' ~ ('s' if n != 1 else '') ~ ' found' %}
-          {% elif src_key == 'pulsedive' %}
-            {% set n = (src.get('ports') or []) | length %}
-            {% if n > 0 %}
-              {% set summary = 'Scanned · ' ~ n|string ~ ' port' ~ ('s' if n != 1 else '') %}
-            {% else %}
-              {% set summary = 'Scanned · ' ~ (hint | capitalize) %}
-            {% endif %}
-          {% elif src_key == 'criminalip' %}
-            {% if src.get('abuse_score') is not none %}
-              {% set summary = 'Risk score ' ~ src.get('abuse_score')|string ~ '/100' %}
-            {% else %}
-              {% set summary = hint | capitalize %}
-            {% endif %}
-          {% elif src_key == 'malwarebazaar' %}
-            {% if src.get('file_name') %}
-              {% set summary = src.get('malware_family') or 'Malware detected' %}
-            {% else %}
-              {% set summary = 'Not in database' %}
-            {% endif %}
-          {% elif src_key == 'stopforumspam' %}
-            {% set freq = src.get('email_reports', 0) %}
-            {% set summary = freq|string ~ ' abuse report' ~ ('s' if freq != 1 else '') %}
-          {% elif src_key == 'urlscan' %}
-            {% if src.get('http_title') %}
-              {% set summary = '"' ~ src.get('http_title')[:35] ~ '"' %}
-            {% elif src.get('screenshot_url') %}
-              {% set summary = 'Page captured' %}
-            {% else %}
-              {% set summary = 'Scan complete' %}
-            {% endif %}
-          {% elif src_key == 'securitytrails' %}
-            {% if src.get('dns_records') %}
-              {% set summary = 'DNS records found' %}
-            {% elif src.get('registrar') %}
-              {% set summary = src.get('registrar') %}
-            {% else %}
-              {% set summary = 'Domain data retrieved' %}
-            {% endif %}
-          {% elif src_key == 'whatsmyname' %}
-            {% set n = (src.get('username_hits') or []) | length %}
-            {% if n > 0 %}
-              {% set summary = 'Found on ' ~ n|string ~ ' platform' ~ ('s' if n != 1 else '') %}
-            {% else %}
-              {% set summary = 'No accounts found' %}
-            {% endif %}
-          {% else %}
-            {% set summary = hint | capitalize %}
-          {% endif %}
-        {% elif status == 'no_key' %}
-          {% set summary = 'API key not set up' %}
-        {% elif status == 'skipped' %}
-          {% set summary = 'Not applicable for ' ~ ioc.type.value ~ 's' %}
-        {% elif status == 'error' %}
-          {% set summary = src.get('error', 'Connection failed') | truncate(40) %}
-        {% elif status == 'timeout' %}
-          {% set summary = 'Request timed out' %}
-        {% else %}
-          {% set summary = '—' %}
-        {% endif %}
-
-        <div class="source-row"
-             style="{% if dimmed %}opacity:0.38;{% endif %}
-                    {% if status == 'error' %}opacity:0.55;{% endif %}">
-          {# Dot: colored by verdict if active, gray if not applicable, orange if error #}
-          {% if active %}
-            <span class="source-dot" style="background:var(--v-{{ hint }})"></span>
-          {% elif status == 'error' %}
-            <span class="source-dot" style="background:var(--v-suspicious)"></span>
-          {% else %}
-            <span class="source-dot" style="background:var(--border2)"></span>
-          {% endif %}
-
-          <span class="source-name"
-                style="color:{% if active %}var(--text){% else %}var(--text3){% endif %}">
-            {{ src_label }}
-          </span>
-
-          <span class="source-summary"
-                style="color:{% if active %}var(--text2){% elif status == 'error' %}var(--v-suspicious){% else %}var(--text3){% endif %};
-                       font-style:{% if dimmed %}italic{% else %}normal{% endif %}">
-            {{ summary }}
-          </span>
-
-          {% if active and source_links %}
-          <a class="source-link" href="{{ source_links.get(src_key, '#') }}"
-             target="_blank" rel="noopener">↗</a>
-          {% endif %}
-        </div>
-      {% endfor %}
-    </div>
-
-    {# ══ SECTION 4: GEOLOCATION (IP only) ══ #}
-    {% if ioc.type.value == 'ip' and geo %}
-    <div class="section-card anim-fade-up anim-delay-3">
-      <div class="section-card-title">④ Geolocation</div>
-      <div id="geo-map"></div>
-      <div class="divider"></div>
-      <table class="info-table" style="margin-top:0">
-        {% if unified.country %}<tr><td>Country</td><td>{{ unified.country }}</td></tr>{% endif %}
-        {% if unified.city    %}<tr><td>City</td><td>{{ unified.city }}</td></tr>{% endif %}
-        {% if unified.org     %}<tr><td>Org</td><td>{{ unified.org }}</td></tr>{% endif %}
-        {% if unified.asn     %}<tr><td>ASN</td><td>{{ unified.asn }}</td></tr>{% endif %}
-        {% if unified.isp     %}<tr><td>ISP</td><td>{{ unified.isp }}</td></tr>{% endif %}
-        {% if unified.network %}<tr><td>Network</td><td>{{ unified.network }}</td></tr>{% endif %}
-      </table>
-    </div>
-    {% endif %}
-
-    {# ── Scan history ── #}
-    {% if history | length > 1 %}
-    <div class="section-card anim-fade-up anim-delay-4">
-      <div class="section-card-title">Scan History</div>
-      {% for h in history[:6] %}
-      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:11px">
-        <span class="badge badge-{{ h.verdict.value if h.verdict else 'unknown' }}" style="font-size:8px">
-          {{ h.verdict.value if h.verdict else '?' }}
-        </span>
-        <span class="mono" style="color:var(--text2)">{{ h.score }}/100</span>
-        <span style="flex:1;color:var(--text3);font-size:10px">{{ h.scanned_at.strftime('%Y-%m-%d %H:%M') if h.scanned_at else '' }}</span>
-        <span style="font-size:9px;color:var(--text3)">{{ h.triggered_by.value if h.triggered_by else '' }}</span>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
+    </div>{# end results-main #}
 
   </div>{# end results-side #}
   </div>{# end results-grid #}
+
+  {# ══ GRAPH — Full-width below main grid ══ #}
+  <div class="graph-card anim-fade-up anim-delay-3" style="margin-top:20px">
+    <div class="graph-header">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="var(--text3)" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3"/>
+        <circle cx="4" cy="6" r="2"/><line x1="6" y1="6" x2="9" y2="10"/>
+        <circle cx="20" cy="6" r="2"/><line x1="18" y1="6" x2="15" y2="10"/>
+        <circle cx="4" cy="18" r="2"/><line x1="6" y1="18" x2="9" y2="14"/>
+        <circle cx="20" cy="18" r="2"/><line x1="18" y1="18" x2="15" y2="14"/>
+      </svg>
+      <div class="graph-title">⑤ Correlation Graph</div>
+      <span style="font-family:'Space Mono',monospace;font-size:10px;
+                   color:var(--text3);margin-left:auto">
+        Click any node for details
+      </span>
+      <a href="/graph" target="_blank"
+         style="font-family:'Space Mono',monospace;font-size:10px;
+                color:var(--text3);padding:4px 12px;border-radius:7px;
+                border:1px solid var(--border);margin-left:10px;
+                transition:all 0.15s;white-space:nowrap"
+         onmouseover="this.style.borderColor='var(--teal)';this.style.color='var(--teal)'"
+         onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
+        Full graph ↗
+      </a>
+    </div>
+    <div class="graph-body">
+      {# Canvas area — expands to fill #}
+      <div class="graph-canvas-area">
+        <div id="graph-container" data-ioc-id="{{ ioc.id }}"
+             style="height:480px;position:relative">
+          <div class="graph-empty">
+            <span style="font-size:28px;opacity:0.2">◎</span>
+            <span style="font-size:13px">Loading graph...</span>
+          </div>
+        </div>
+      </div>
+      {# Info panel — right sidebar of graph #}
+      <div class="graph-info-panel" id="graph-info-panel">
+        <div id="graph-empty-state"
+             style="height:100%;display:flex;flex-direction:column;
+                    align-items:center;justify-content:center;
+                    gap:10px;color:var(--text3);text-align:center;padding:20px">
+          <span style="font-size:32px;opacity:0.15">◉</span>
+          <span style="font-family:'Space Mono',monospace;font-size:10px;
+                       letter-spacing:0.14em;text-transform:uppercase">
+            Select a node
+          </span>
+          <span style="font-size:13px;line-height:1.6;color:var(--text3)">
+            Click any indicator in the graph to see its details here
+          </span>
+        </div>
+        <div id="graph-node-detail" style="display:none">
+          <div style="font-family:'Outfit',sans-serif;font-size:17px;font-weight:600;
+                      color:var(--text);margin-bottom:10px;word-break:break-all;
+                      line-height:1.3"
+               id="tt-label"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+            <span class="badge" id="tt-verdict-badge"></span>
+            <span style="font-family:'Space Mono',monospace;font-size:10px;
+                         color:var(--text3)" id="tt-source-label"></span>
+          </div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:16px;
+                      line-height:1.6;padding:10px 0;border-top:1px solid var(--border)"
+               id="tt-reason"></div>
+          <div id="tt-score-row" style="margin-bottom:16px">
+            <div style="font-family:'Space Mono',monospace;font-size:10px;
+                        color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;
+                        margin-bottom:4px">Risk Score</div>
+            <div style="font-family:'Outfit',sans-serif;font-size:32px;font-weight:800;
+                        letter-spacing:-0.02em;color:var(--text)" id="tt-score"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button id="tt-analyze" class="btn btn-primary"
+                    style="width:100%;justify-content:center;display:none">
+              Analyze this indicator →
+            </button>
+            <button id="tt-copy"
+                    onclick="copyNodeValue()"
+                    style="width:100%;padding:9px;border-radius:9px;
+                           background:var(--bg3);border:1px solid var(--border);
+                           color:var(--text2);font-size:13px;font-family:'Outfit',sans-serif;
+                           font-weight:500;cursor:pointer;transition:all 0.15s"
+                    onmouseover="this.style.background='var(--bg4)'"
+                    onmouseout="this.style.background='var(--bg3)'">
+              Copy value
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
