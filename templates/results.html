@@ -473,10 +473,20 @@
                       text-transform:uppercase;color:var(--text3);margin-bottom:5px">
             {{ record_type }} Records
           </div>
-          {% for rec in (records.get('values') or [])[:8] %}
+          {# records can be: dict with 'values' key, or a list directly #}
+          {% if records is mapping %}
+            {% set rec_list = (records.get('values') or [])[:8] %}
+          {% else %}
+            {% set rec_list = (records or [])[:8] %}
+          {% endif %}
+          {% for rec in rec_list %}
           <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);
                       padding:3px 8px;background:var(--bg3);border-radius:4px;margin-bottom:3px">
-            {{ rec.get('ip') or rec.get('value') or rec | string }}
+            {% if rec is mapping %}
+              {{ rec.get('ip') or rec.get('value') or rec.get('address') or rec | string }}
+            {% else %}
+              {{ rec | string }}
+            {% endif %}
           </div>
           {% endfor %}
         </div>
