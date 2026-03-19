@@ -212,14 +212,24 @@ class BaseConnector(abc.ABC):
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
-            # 404 = indicator not in this source's database — treat as unknown, not error
             if code == 404:
-                result.status     = SourceStatus.ok
+                # Not in this source's database — unknown verdict, not an error
+                result.status       = SourceStatus.ok
                 result.verdict_hint = "unknown"
-                result.error      = None
+                result.error        = None
+            elif code == 429:
+                # Rate limited — show clearly, not as generic error
+                result.status = SourceStatus.error
+                result.error  = "Rate limit exceeded"
+            elif code == 402:
+                result.status = SourceStatus.error
+                result.error  = "Out of credits"
+            elif code == 401:
+                result.status = SourceStatus.error
+                result.error  = "Invalid API key"
             else:
-                result.status     = SourceStatus.error
-                result.error      = f"HTTP {code}"
+                result.status = SourceStatus.error
+                result.error  = f"HTTP {code}"
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
         except Exception as exc:
             result.status     = SourceStatus.error

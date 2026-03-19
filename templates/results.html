@@ -641,7 +641,7 @@
               {% else %}{{ (hint or 'unknown') | capitalize }}{% endif %}
             {% elif status == 'no_key' %}No key configured
             {% elif status == 'skipped' %}N/A for {{ ioc.type.value }}
-            {% elif status == 'error' %}Error — {{ src.get('error','') | truncate(30) }}
+            {% elif status == 'error' %}{{ src.get('error','Error') | truncate(35) }}
             {% elif status == 'timeout' %}Timeout
             {% else %}—{% endif %}
           </span>

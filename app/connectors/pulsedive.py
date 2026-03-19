@@ -198,14 +198,18 @@ class PulsediveConnector(BaseConnector):
             ]
 
         # ── Feeds (pulse count) ────────────────────────────────────
-        feeds = raw.get("feeds", []) or []
+        raw_feeds = raw.get("feeds")
+        feeds = raw_feeds if isinstance(raw_feeds, list) else []
         result.pulse_count = len(feeds)
 
         # ── Threats → tags ─────────────────────────────────────────
+        raw_attrs = raw.get("attributes")
+        attrs = raw_attrs if isinstance(raw_attrs, dict) else {}
         threats = (
             raw.get("threats") or
-            raw.get("attributes", {}).get("threats", []) or []
+            attrs.get("threats", []) or []
         )
+        threats = threats if isinstance(threats, list) else []
         result.tags = []
         for t in threats:
             if isinstance(t, str):
@@ -240,9 +244,12 @@ class PulsediveConnector(BaseConnector):
                 "category": "host_info",
             })
         if result.pulse_count > 0:
-            feed_names = [
-                f.get("name", "") for f in feeds[:3] if f.get("name")
-            ]
+            feed_names = []
+            for f in feeds[:3]:
+                if isinstance(f, dict) and f.get("name"):
+                    feed_names.append(f["name"])
+                elif isinstance(f, str) and f:
+                    feed_names.append(f)
             detail = f"Present in {result.pulse_count} threat feed(s)"
             if feed_names:
                 detail += f": {', '.join(feed_names)}"

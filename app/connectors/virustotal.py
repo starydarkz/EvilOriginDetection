@@ -173,3 +173,16 @@ class VirusTotalConnector(BaseConnector):
 
         # Relations are stored in result.raw (via _fetch) and read
         # directly by the graph router from raw_json in the DB
+
+
+def _epoch_to_iso(val) -> str | None:
+    """Convert Unix timestamp int or ISO string to ISO date string."""
+    if val is None:
+        return None
+    try:
+        from datetime import datetime, timezone
+        if isinstance(val, (int, float)) and val > 1_000_000_000:
+            return datetime.fromtimestamp(val, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        return str(val)[:19]
+    except Exception:
+        return str(val)[:19] if val else None
