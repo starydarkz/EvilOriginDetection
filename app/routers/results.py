@@ -132,6 +132,10 @@ async def _results_page_inner(
         src: _source_link(src, ioc.value, ioc_type_str)
         for src in sources.keys()
     }
+    # Override URLScan link with direct result URL if available
+    us_result_url = sources.get("urlscan", {}).get("result_url")
+    if us_result_url:
+        source_links["urlscan"] = us_result_url
 
     # Merge and deduplicate ports + services + technologies from all sources
     # Priority: Shodan (most detailed) > Pulsedive > CriminalIP > others
@@ -230,6 +234,13 @@ async def _results_page_inner(
     wmn = sources.get("whatsmyname",     {})
     sfs = sources.get("stopforumspam",   {})
 
+    def _to_int(val) -> int | None:
+        """Normalize http_status to int — URLScan returns string."""
+        try:
+            return int(str(val)) if val is not None else None
+        except (ValueError, TypeError):
+            return None
+
     def _tri_flag(vals: list) -> bool | None:
         """
         Tri-state flag merge across sources.
@@ -300,7 +311,7 @@ async def _results_page_inner(
         "expiry_date":    first(pd.get("expiry_date"),   st.get("expiry_date")),
         "dns_records":    first(pd.get("dns_records"),   st.get("dns_records"), {}),
         "screenshot_url": first(us.get("screenshot_url"), pd.get("screenshot_url")),
-        "http_status":    first(us.get("http_status"),   pd.get("http_status")),
+        "http_status":    _to_int(first(us.get("http_status"),   pd.get("http_status"))),
         "http_title":     first(us.get("http_title"),    pd.get("http_title")),
         "technologies":   merged_techs,
         "redirects":      first(us.get("redirects"),     pd.get("redirects"), []),
@@ -787,6 +798,7 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
         case "malwarebazaar":
             return f"https://bazaar.abuse.ch/sample/{value}"
         case "urlscan":
+            # Use the direct scan result URL if stored, else fall back to search
             if ioc_type == "url":
                 return f"https://urlscan.io/search/#page.url:{quote(value, safe='')}"
             return f"https://urlscan.io/search/#domain:{quote(value, safe='')}"
