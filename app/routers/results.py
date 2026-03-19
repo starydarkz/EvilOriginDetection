@@ -6,6 +6,7 @@ POST /results/{ioc_id}/rescan → force fresh analysis.
 """
 import json
 import traceback
+from app.logger import app_logger, exc_logger, log_query
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -288,11 +289,12 @@ async def _results_page_inner(
         "first_submission":first(vt.get("first_submission"), mb.get("first_submission")),
 
         # ── Abuse / email ─────────────────────────────────────────
-        "email_reports":   sfs.get("email_reports", 0),
-        "sfs_confidence":  sfs.get("confidence"),
-        "sfs_country":     sfs.get("country"),
-        "username_hits":   wmn.get("username_hits") or [],
-        "sfs_verdict":     sfs.get("verdict_hint", "unknown"),
+        "email_reports":     sfs.get("email_reports", 0),
+        "sfs_confidence":    sfs.get("confidence"),
+        "sfs_country":       sfs.get("country"),
+        "sfs_assoc_emails":  sfs.get("reports", []),   # individual report entries with emails
+        "username_hits":     wmn.get("username_hits") or [],
+        "sfs_verdict":       sfs.get("verdict_hint", "unknown"),
         "pulse_count":     pd.get("pulse_count", 0),
 
         # ── Source availability ───────────────────────────────────
@@ -519,6 +521,19 @@ async def graph_data(
                         add_edge(central_id, nid, "account-on", "resolution",
                                  source_intel="whatsmyname")
 
+        # ── StopForumSpam — emails associated with this IP ───────
+        if src == "stopforumspam":
+            for entry in (raw.get("_associated_emails") or [])[:8]:
+                email = entry.get("email", "")
+                if email and "@" in email:
+                    nid = f"sfs_email_{email}"
+                    if add_node(nid, email, "email",
+                                verdict="suspicious",
+                                source="stopforumspam",
+                                reason=f"Email used in spam submissions from this IP (StopForumSpam)"):
+                        add_edge(central_id, nid, "spam-submission", "threat",
+                                 source_intel="stopforumspam")
+
         # ── URLScan — IPs/domains contacted during scan ────────────
         if src == "urlscan":
             lists = raw.get("_lists", {}) or {}
@@ -558,8 +573,6 @@ async def rescan(
 ):
     """Force a fresh analysis, ignoring cache."""
     from app.routers.analyze import analyze_single
-    from app.logger import log_query
-
     stmt   = select(IOC).where(IOC.id == ioc_id)
     result = await db.execute(stmt)
     ioc    = result.scalar_one_or_none()

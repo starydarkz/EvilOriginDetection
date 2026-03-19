@@ -32,6 +32,9 @@ class ShodanConnector(BaseConnector):
             )
             if r.status_code == 404:
                 return {"_not_found": True}
+            if r.status_code == 403:
+                # 403 on Shodan = IP blocked or plan restriction
+                raise Exception("Shodan: access forbidden (check plan or IP restrictions)")
             r.raise_for_status()
             return r.json()
 
