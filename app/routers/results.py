@@ -80,6 +80,23 @@ async def _results_page_inner(
         norm.setdefault("reports",    [])
         norm.setdefault("http_title", None)
         norm.setdefault("is_proxy",   None)
+        # Extract banners from CriminalIP raw for display
+        if sr.source == "criminalip":
+            try:
+                raw_json = json.loads(sr.raw_json or "{}")
+                banners   = raw_json.get("_banners",    {})
+                vuln_pts  = raw_json.get("_vuln_ports", {})
+                conn_doms = raw_json.get("_connected_domains", [])
+                if banners:
+                    norm["banners"]   = {int(k): v for k, v in banners.items()
+                                         if str(k).isdigit()}
+                if vuln_pts:
+                    norm["vuln_ports"] = {int(k): v for k, v in vuln_pts.items()
+                                          if str(k).isdigit()}
+                if conn_doms:
+                    norm["connected_domains"] = conn_doms
+            except Exception:
+                pass
         norm.setdefault("is_hosting", None)
         norm.setdefault("is_mobile",  None)
         norm.setdefault("is_scanner", None)
@@ -136,7 +153,7 @@ async def _results_page_inner(
                 seen_ports.add(p)
                 merged_ports.append(p)
                 port_source[p] = src_priority
-        # Services (port → service name)
+        # Services (port → service name) + banners
         for port, svc in (sdata.get("services") or {}).items():
             try:
                 port_int = int(port)
@@ -147,6 +164,16 @@ async def _results_page_inner(
                     "service": svc,
                     "source":  src_priority,
                 }
+        # Banners from CriminalIP
+        for port, banner in (sdata.get("banners") or {}).items():
+            try:
+                port_int = int(port)
+            except (ValueError, TypeError):
+                continue
+            if port_int in merged_services:
+                merged_services[port_int]["banner"] = banner
+            else:
+                merged_services[port_int] = {"banner": banner, "source": src_priority}
         # Technologies
         for t in (sdata.get("technologies") or []):
             tl = t.lower() if t else ""
@@ -298,11 +325,13 @@ async def _results_page_inner(
         "pulse_count":     pd.get("pulse_count", 0),
 
         # ── Source availability ───────────────────────────────────
-        "has_screenshot": bool(us.get("screenshot_url")),
-        "shodan_ok":      ok("shodan"),
-        "urlscan_ok":     ok("urlscan"),
-        "st_ok":          ok("securitytrails"),
-        "mb_ok":          ok("malwarebazaar"),
+        "has_screenshot":    bool(us.get("screenshot_url")),
+        "shodan_ok":         ok("shodan"),
+        "urlscan_ok":        ok("urlscan"),
+        "st_ok":             ok("securitytrails"),
+        "mb_ok":             ok("malwarebazaar"),
+        "connected_domains": cip.get("connected_domains") or [],
+        "cip_vuln_ports":    cip.get("vuln_ports") or {},
     }
 
     return templates.TemplateResponse("results.html", {
@@ -520,6 +549,28 @@ async def graph_data(
                                 reason=f"Username found on {site} (WhatsMyName)"):
                         add_edge(central_id, nid, "account-on", "resolution",
                                  source_intel="whatsmyname")
+
+        # ── CriminalIP — connected domains + CVEs ─────────────────
+        if src == "criminalip":
+            for domain in (raw.get("_connected_domains") or [])[:6]:
+                if domain:
+                    nid = f"cip_dom_{domain}"
+                    if add_node(nid, domain, "domain",
+                                verdict="suspicious",
+                                source="criminalip",
+                                reason="Domain connected to this IP (Criminal IP)"):
+                        add_edge(central_id, nid, "connected-domain",
+                                 "resolution", source_intel="criminalip")
+            # CVE tags → label them as threat nodes
+            for tag in (norm.get("tags") or []):
+                if tag.startswith("CVE-"):
+                    nid = f"cip_cve_{tag}"
+                    if add_node(nid, tag, "hash",  # closest type for CVE IDs
+                                verdict="malicious",
+                                source="criminalip",
+                                reason=f"Vulnerability {tag} detected (Criminal IP)"):
+                        add_edge(central_id, nid, "vulnerable-to",
+                                 "threat", source_intel="criminalip")
 
         # ── StopForumSpam — emails associated with this IP ───────
         if src == "stopforumspam":

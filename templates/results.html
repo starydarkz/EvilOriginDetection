@@ -501,23 +501,62 @@
       {% if ioc.type.value in ['domain','url'] %}
       <div class="tab-panel" id="tab-screenshot">
         {% if unified.screenshot_url %}
-        <div class="screenshot-frame">
-          <img src="{{ unified.screenshot_url }}" alt="Screenshot of {{ ioc.value }}"
-               loading="lazy" onerror="this.parentElement.innerHTML='<p style=\'padding:16px;font-size:13px;color:var(--text3)\'>Screenshot unavailable.</p>'">
+        <div class="screenshot-frame" style="position:relative">
+          <img src="{{ unified.screenshot_url }}"
+               alt="Screenshot of {{ ioc.value }}"
+               style="width:100%;border-radius:6px;display:block"
+               onerror="this.style.display='none';document.getElementById('ss-fallback').style.display='flex'">
+          <div id="ss-fallback" style="display:none;align-items:center;justify-content:center;
+               height:120px;color:var(--text3);font-size:13px;flex-direction:column;gap:8px">
+            <span>Screenshot could not load</span>
+            <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
+               style="font-size:11px;color:var(--text3);text-decoration:underline">
+              Open directly ↗
+            </a>
+          </div>
         </div>
-        {% if unified.http_status or unified.http_title or unified.technologies %}
-        <p style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.6">
-          {% if unified.http_status %}HTTP {{ unified.http_status }}{% endif %}
-          {% if unified.http_title %} · "{{ unified.http_title[:80] }}"{% endif %}
-          {% if unified.technologies %} · {{ unified.technologies | join(', ') }}{% endif %}
-          {% if unified.redirects %} · {{ unified.redirects | length }} redirect(s){% endif %}
-        </p>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          {% if unified.http_status %}
+          <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
+            HTTP {{ unified.http_status }}
+          </span>
+          {% endif %}
+          {% if unified.http_title %}
+          <span style="font-size:12px;color:var(--text2)">
+            "{{ unified.http_title[:60] }}"
+          </span>
+          {% endif %}
+          <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
+             style="margin-left:auto;font-size:11px;color:var(--text3)">
+            Full screenshot ↗
+          </a>
+        </div>
+        {% if unified.technologies %}
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">
+          {% for tech in unified.technologies[:8] %}
+          <span style="font-size:11px;padding:2px 8px;background:var(--bg3);
+                       border-radius:4px;border:0.5px solid var(--border);
+                       color:var(--text2)">{{ tech }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if unified.redirects %}
+        <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+          Redirects: {% for r in unified.redirects[:3] %}
+            <span style="font-family:'JetBrains Mono',monospace">{{ r[:60] }}</span>
+            {% if not loop.last %} → {% endif %}
+          {% endfor %}
+        </div>
         {% endif %}
         {% else %}
-        <p style="font-size:13px;color:var(--text3)">
-          {% if not unified.urlscan_ok %}URLScan.io key not configured.
-          {% else %}No screenshot available for this indicator.{% endif %}
-        </p>
+        <div style="display:flex;align-items:center;justify-content:center;
+             height:100px;color:var(--text3);font-size:13px;flex-direction:column;gap:6px">
+          <span>{% if not unified.urlscan_ok %}URLScan.io key not configured
+                {% else %}No screenshot available{% endif %}</span>
+          {% if unified.urlscan_ok %}
+          <span style="font-size:11px">URLScan found no scans for this indicator</span>
+          {% endif %}
+        </div>
         {% endif %}
       </div>
       {% endif %}
