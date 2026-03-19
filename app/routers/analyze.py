@@ -107,6 +107,19 @@ async def analyze_single(
             app_logger.warning(f"  [{r.source}] status=error — {r.error}")
         elif r.status.value == "ok":
             app_logger.debug(f"  [{r.source}] ok — verdict={r.verdict_hint}")
+            # Extra debug for SFS to see what we get from evidence
+            if r.source == "stopforumspam" and r.raw:
+                ip_data = r.raw.get("ip", {}) or {}
+                evidence = ip_data.get("evidence") or []
+                assoc    = r.raw.get("_associated_emails", [])
+                app_logger.info(
+                    f"  [stopforumspam] appears={ip_data.get('appears',0)} "
+                    f"freq={ip_data.get('frequency',0)} "
+                    f"evidence_entries={len(evidence)} "
+                    f"emails_found={len(assoc)}"
+                )
+                if evidence:
+                    app_logger.info(f"  [stopforumspam] evidence[0] sample: {str(evidence[0])[:200]}")
         else:
             app_logger.debug(f"  [{r.source}] status={r.status.value}")
 
