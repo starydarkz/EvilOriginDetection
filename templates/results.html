@@ -2,102 +2,142 @@
 {% block title %}{{ ioc.value }} — Evil Origin Detection{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
-/* results-specific overrides */
+/* ── Results page layout ─────────────────────────────── */
+.results-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px 300px;
+  gap: 18px;
+  align-items: start;
+}
+.results-main  { display:flex; flex-direction:column; gap:18px; }
+.results-side  { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; }
+.results-graph { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; }
 
-/* Score gauge */
+@media (max-width:1100px) {
+  .results-layout { grid-template-columns:1fr 300px; }
+  .results-graph  { grid-column:1/-1; position:static; }
+}
+@media (max-width:700px) {
+  .results-layout { grid-template-columns:1fr; }
+  .results-side, .results-graph { position:static; }
+}
+
+/* ── Cache bar ───────────────────────────────────────── */
+.cache-bar {
+  display:flex; align-items:center; gap:8px;
+  font-size:12px; color:var(--text3);
+  padding:8px 14px; border-radius:9px;
+  background:var(--bg2); border:1px solid var(--border);
+  margin-bottom:18px; font-family:'Space Mono',monospace;
+}
+.cache-dot { width:7px; height:7px; border-radius:50%; }
+.cache-dot.live   { background:var(--teal); box-shadow:0 0 6px var(--teal); }
+.cache-dot.cached { background:var(--warn); }
+.cache-dot.stale  { background:var(--text3); }
+
+/* ── Score gauge ─────────────────────────────────────── */
 .score-gauge-wrap { display:flex; align-items:center; gap:20px; }
-.gauge-svg { flex-shrink:0; }
-.score-breakdown { flex:1; display:flex; flex-direction:column; gap:8px; }
-.score-row { display:flex; align-items:center; gap:10px; font-size:13px; }
-.score-row-label { width:100px; color:var(--text3); flex-shrink:0; }
-.score-row-bar { flex:1; height:5px; border-radius:3px; background:var(--bg3); overflow:hidden; }
-.score-row-fill { height:100%; border-radius:3px; transition:width 0.7s cubic-bezier(0.4,0,0.2,1); }
-.score-row-val { width:72px; text-align:right; font-family:'Space Mono',monospace; font-size:12px; color:var(--text3); flex-shrink:0; }
 
-/* Source rows */
-.source-row { display:flex; align-items:center; padding:8px 10px; border-radius:7px; background:var(--bg3); border:1px solid var(--border); margin-bottom:6px; gap:10px; transition:border-color 0.15s; }
-.source-row:hover { border-color:var(--border2); }
-.source-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-.source-name { font-family:'Space Mono',monospace; font-size:13px; color:var(--text); width:120px; flex-shrink:0; }
-.source-summary { flex:1; font-size:13px; color:var(--text2); }
-.source-link { font-family:'Space Mono',monospace; font-size:12px; color:var(--blue); text-decoration:none; flex-shrink:0; transition:color 0.15s; }
-.source-link:hover { color:var(--accent); }
-.source-row.no-key { opacity:0.4; }
-.source-row.error  { opacity:0.6; }
+/* ── IOC type badge ──────────────────────────────────── */
+.ioc-type {
+  font-family:'Space Mono',monospace; font-size:10px; font-weight:700;
+  letter-spacing:0.12em; text-transform:uppercase;
+  padding:2px 9px; border-radius:5px;
+}
+.ioc-type.ip      { background:rgba(102,153,255,0.15); color:var(--t-ip); }
+.ioc-type.domain  { background:rgba(170,119,255,0.15); color:var(--t-domain); }
+.ioc-type.hash    { background:rgba(68,221,187,0.12);  color:var(--t-hash); }
+.ioc-type.url     { background:rgba(255,170,68,0.15);  color:var(--t-url); }
+.ioc-type.email   { background:rgba(255,85,85,0.15);   color:var(--t-email); }
 
-/* Tags */
-.tags-wrap { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+/* ── Timeline ────────────────────────────────────────── */
+.timeline-item {
+  display:flex; gap:12px; padding:9px 0;
+  border-bottom:1px solid var(--border);
+}
+.timeline-item:last-child { border-bottom:none; }
+.timeline-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:5px; }
+.timeline-time {
+  font-family:'Space Mono',monospace; font-size:10px;
+  color:var(--text3); white-space:nowrap; margin-top:2px;
+}
+.timeline-summary { font-size:13px; color:var(--text2); line-height:1.5; }
+.timeline-src-badge {
+  font-family:'Space Mono',monospace; font-size:9px;
+  padding:1px 7px; border-radius:4px; background:var(--bg3);
+  border:1px solid var(--border); color:var(--text3);
+  text-decoration:none; white-space:nowrap;
+}
 
-/* Tech info tabs */
-.tab-nav { display:flex; gap:2px; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:0; }
-.tab-btn { font-family:'Space Mono',monospace; font-size:12px; letter-spacing:0.08em; padding:6px 12px; background:none; border:none; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
-.tab-btn:hover { color:var(--text); }
-.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+/* ── Graph panel ─────────────────────────────────────── */
+.graph-wrap {
+  background:var(--bg2); border-radius:12px; overflow:hidden;
+  position:relative; border:1px solid var(--border);
+}
+.graph-info-panel {
+  padding:16px; min-height:180px;
+  border-top:1px solid var(--border);
+  background:var(--bg);
+}
+#graph-container { position:relative; }
+#graph-empty-state, #graph-node-detail { }
+
+/* ── Screenshot ─────────────────────────────────────── */
+.screenshot-frame { border-radius:10px; overflow:hidden; border:1px solid var(--border); }
+
+/* ── Port warn ───────────────────────────────────────── */
+.port-warn { color:var(--v-malicious) !important; font-weight:600; }
+
+/* ── Tab nav ─────────────────────────────────────────── */
+.tab-nav {
+  display:flex; gap:2px; margin-bottom:16px;
+  border-bottom:1px solid var(--border); padding-bottom:0;
+  flex-wrap:wrap;
+}
+.tab-btn {
+  font-family:'Outfit',sans-serif; font-size:13px; font-weight:500;
+  padding:7px 14px; border:none; background:transparent;
+  color:var(--text3); border-radius:7px 7px 0 0;
+  border-bottom:2px solid transparent;
+  transition:all 0.15s; margin-bottom:-1px; cursor:pointer;
+}
+.tab-btn:hover { color:var(--text); background:var(--bg3); }
+.tab-btn.active { color:var(--text); border-bottom-color:var(--accent); background:var(--bg2); }
 .tab-panel { display:none; }
 .tab-panel.active { display:block; }
-
-/* Geo */
-.geo-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-#geo-map { width:100%; height:170px; border-radius:8px; overflow:hidden; border:1px solid var(--border); background:var(--bg3); }
-
-/* Graph tooltip */
-#graph-tooltip { display:none; position:absolute; top:12px; right:12px; z-index:10; background:var(--surface-solid); border:1px solid var(--border2); border-radius:8px; padding:12px 14px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
-
-/* Rescan / cache status */
-.cache-bar { display:flex; align-items:center; gap:10px; padding:8px 14px; border-radius:7px; background:var(--bg3); border:1px solid var(--border); font-size:13px; color:var(--text3); margin-bottom:16px; }
-.cache-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-.cache-dot.live   { background:var(--teal); box-shadow:0 0 5px var(--teal); }
-.cache-dot.cached { background:var(--blue); }
-.cache-dot.stale  { background:var(--warn); }
-
-/* Score number color helpers */
-.score-malicious { color:var(--v-malicious); }
-.score-suspicious{ color:var(--v-suspicious); }
-.score-clean     { color:var(--v-clean); }
-.score-unknown   { color:var(--v-unknown); }
-
-@media(max-width:900px){
-  .results-grid { grid-template-columns:1fr; }
-  .results-side  { position:static; }
-}
 </style>
 {% endblock %}
 
-{% block content %}
 <div class="page-wide">
 
   {# ── TOP BAR ── #}
-  <div class="anim-fade-up" style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+  <div class="anim-fade-up" style="display:flex;align-items:center;gap:10px;
+       margin-bottom:14px;flex-wrap:wrap">
     <a href="/" class="btn btn-ghost btn-sm">← Back</a>
-    <span class="ioc-type {{ ioc.type.value }}">{{ ioc.type.value.upper() }}</span>
-    <span class="mono" style="font-size:13px;color:var(--text);flex:1;word-break:break-all">{{ ioc.value }}</span>
+    <span class="ioc-type {{ ioc.type.value }}">{{ ioc.type.value }}</span>
+    <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text);
+                 flex:1;word-break:break-all;min-width:0">{{ ioc.value }}</span>
     <span class="badge badge-{{ ioc.verdict.value if ioc.verdict else 'unknown' }}">
       {{ (ioc.verdict.value if ioc.verdict else 'unknown').capitalize() }}
     </span>
     {% if ioc.score is not none %}
-    <span class="mono score-{{ ioc.verdict.value if ioc.verdict else 'unknown' }}" style="font-size:14px;font-weight:700">
+    <span style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;
+                 color:var(--v-{{ ioc.verdict.value if ioc.verdict else 'unknown' }})">
       {{ ioc.score }}/100
     </span>
     {% endif %}
-
-    {# Export + Copy #}
-    <a href="/results/{{ ioc.id }}/export" class="btn btn-ghost btn-sm">↓ Export</a>
-    <button class="btn btn-ghost btn-sm" onclick="copyToClipboard('{{ ioc.value }}')">⎘ Copy</button>
+    <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard?.writeText('{{ ioc.value }}')">⎘ Copy</button>
   </div>
 
-  {# ── CACHE STATUS BAR ── #}
+  {# ── CACHE BAR ── #}
   <div class="cache-bar anim-fade-up anim-delay-1">
     {% if not is_cached %}
-      <span class="cache-dot live"></span>
-      <span>Live result — just analyzed</span>
+      <span class="cache-dot live"></span><span>Live — just analyzed</span>
     {% elif cache_age_h is not none and cache_age_h < 6 %}
-      <span class="cache-dot cached"></span>
-      <span>Cached result · {{ cache_age_h }}h ago</span>
+      <span class="cache-dot cached"></span><span>Cached · {{ cache_age_h }}h ago</span>
     {% else %}
-      <span class="cache-dot stale"></span>
-      <span>Cached result · {{ cache_age_h }}h ago — consider rescanning</span>
+      <span class="cache-dot stale"></span><span>Cached · {{ cache_age_h }}h ago — consider rescanning</span>
     {% endif %}
     <span style="flex:1"></span>
     <form method="POST" action="/results/{{ ioc.id }}/rescan" style="display:inline">
@@ -105,43 +145,43 @@
     </form>
   </div>
 
-  <div class="results-grid">
+  {# ══ 3-COLUMN LAYOUT ══ #}
+  <div class="results-layout">
+
+  {# ═══ COLUMN 1: MAIN CONTENT ═══ #}
   <div class="results-main">
 
-    {# ══ SECTION 1: RISK SCORE ══ #}
+    {# ── SECTION 1: RISK SCORE ── #}
     <div class="section-card anim-fade-up anim-delay-1">
       <div class="section-card-title">① Risk Score</div>
+      {% set score   = ioc.score or 0 %}
+      {% set verdict = ioc.verdict.value if ioc.verdict else 'unknown' %}
+      {% set circ    = 163 %}
+      {% set dash    = (score / 100 * circ)|round|int %}
       <div class="score-gauge-wrap">
-
-        {# SVG gauge ring #}
-        {% set score = ioc.score or 0 %}
-        {% set verdict = ioc.verdict.value if ioc.verdict else 'unknown' %}
-        {% set circumference = 163 %}
-        {% set dash = (score / 100 * circumference)|round|int %}
-        <svg class="gauge-svg" viewBox="0 0 80 80" width="90" height="90">
+        <svg viewBox="0 0 80 80" width="88" height="88" style="flex-shrink:0">
           <circle cx="40" cy="40" r="26" fill="none" stroke="var(--bg3)" stroke-width="7"/>
           <circle cx="40" cy="40" r="26" fill="none"
             stroke="var(--v-{{ verdict }})"
             stroke-width="7"
-            stroke-dasharray="{{ dash }} {{ circumference - dash }}"
+            stroke-dasharray="{{ dash }} {{ circ - dash }}"
             stroke-dashoffset="40"
             stroke-linecap="round"
             transform="rotate(-90 40 40)"
             style="transition:stroke-dasharray 0.8s ease"
-            opacity="0.85"/>
+            opacity="0.9"/>
           <text x="40" y="37" text-anchor="middle" dominant-baseline="central"
-                style="font-family:'Outfit',sans-serif;font-weight:800;font-size:14px;fill:var(--v-{{ verdict }})">
-            {{ score }}
-          </text>
-          <text x="40" y="52" text-anchor="middle"
-                style="font-family:'Space Mono',monospace;font-size:7px;fill:var(--text3)">
-            /100
-          </text>
+                style="font-family:'Outfit',sans-serif;font-weight:800;font-size:14px;
+                       fill:var(--v-{{ verdict }})">{{ score }}</text>
+          <text x="40" y="53" text-anchor="middle"
+                style="font-family:'Space Mono',monospace;font-size:7px;fill:var(--text3)">/100</text>
         </svg>
-
-        {# Per-source breakdown bars #}
-        <div class="score-breakdown">
-          {# Score breakdown — uses unified for values, sources for status #}
+        <div style="flex:1">
+          <div style="font-family:'Outfit',sans-serif;font-size:22px;font-weight:700;
+                      color:var(--v-{{ verdict }});margin-bottom:12px">
+            {{ verdict.capitalize() }}
+          </div>
+          {# Score breakdown by source #}
           {% set score_rows = [
             ('virustotal',   'VirusTotal',   45),
             ('abuseipdb',    'AbuseIPDB',    20),
@@ -152,49 +192,43 @@
             ('stopforumspam','StopForumSpam',  5),
           ] %}
           {% for src_key, src_label, weight in score_rows %}
-            {% set src = sources.get(src_key, {}) %}
-            {% if src.get('status') == 'ok' %}
-              {% set hint = src.get('verdict_hint') or 'unknown' %}
-              {% set bar_color = 'var(--v-' ~ hint ~ ')' %}
-              {% set bar_pct = 0 %}
-              {% if src_key == 'virustotal' and unified.total_engines %}
-                {% set bar_pct = ((unified.malicious_count / unified.total_engines) * 100)|round|int %}
-              {% elif src_key == 'abuseipdb' and unified.abuse_score is not none %}
-                {% set bar_pct = unified.abuse_score %}
-              {% elif src_key == 'criminalip' and src.get('abuse_score') is not none %}
-                {% set bar_pct = src.get('abuse_score', 0) %}
-              {% elif src_key == 'stopforumspam' %}
-                {% set bar_pct = [src.get('email_reports', 0) * 5, 100] | min %}
-              {% elif hint == 'malicious' %}{% set bar_pct = 85 %}
-              {% elif hint == 'suspicious' %}{% set bar_pct = 50 %}
-              {% elif hint == 'clean' %}{% set bar_pct = 8 %}
-              {% endif %}
-              <div class="score-row">
-                <span class="score-row-label">{{ src_label }}</span>
-                <div class="score-row-bar">
-                  <div class="score-row-fill" style="width:{{ bar_pct }}%;background:{{ bar_color }}"></div>
-                </div>
-                <span class="score-row-val">
-                  {% if src_key == 'virustotal' %}
-                    {{ unified.malicious_count }}/{{ unified.total_engines }}
-                  {% elif src_key == 'abuseipdb' %}
-                    {{ unified.abuse_score }}%
-                  {% elif src_key == 'malwarebazaar' %}
-                    {{ unified.malware_family or 'detected' if hint == 'malicious' else 'not found' }}
-                  {% elif src_key == 'stopforumspam' %}
-                    {{ src.get('email_reports', 0) }} reports
-                  {% else %}
-                    {{ hint }}
-                  {% endif %}
-                </span>
-              </div>
+          {% set src = sources.get(src_key, {}) %}
+          {% if src.get('status') == 'ok' %}
+            {% set hint     = src.get('verdict_hint') or 'unknown' %}
+            {% set bar_color = 'var(--v-' ~ hint ~ ')' %}
+            {% set bar_pct  = 0 %}
+            {% if src_key == 'virustotal' and unified.total_engines %}
+              {% set bar_pct = ((unified.malicious_count / unified.total_engines) * 100)|round|int %}
+            {% elif src_key == 'abuseipdb' and unified.abuse_score is not none %}
+              {% set bar_pct = unified.abuse_score %}
+            {% elif src_key == 'criminalip' and src.get('abuse_score') is not none %}
+              {% set bar_pct = src.get('abuse_score', 0) %}
+            {% elif src_key == 'stopforumspam' %}
+              {% set bar_pct = [src.get('email_reports', 0) * 5, 100] | min %}
+            {% elif hint == 'malicious' %}{% set bar_pct = 85 %}
+            {% elif hint == 'suspicious' %}{% set bar_pct = 50 %}
+            {% elif hint == 'clean' %}{% set bar_pct = 8 %}
             {% endif %}
+            <div class="score-row">
+              <span class="score-row-label">{{ src_label }}</span>
+              <div class="score-row-bar">
+                <div class="score-row-fill" style="width:{{ bar_pct }}%;background:{{ bar_color }}"></div>
+              </div>
+              <span class="score-row-val">
+                {% if src_key == 'virustotal' %}{{ unified.malicious_count }}/{{ unified.total_engines }}
+                {% elif src_key == 'abuseipdb' %}{{ unified.abuse_score }}%
+                {% elif src_key == 'malwarebazaar' %}{{ unified.malware_family or 'detected' if hint == 'malicious' else 'not found' }}
+                {% elif src_key == 'stopforumspam' %}{{ src.get('email_reports', 0) }} reports
+                {% else %}{{ hint }}{% endif %}
+              </span>
+            </div>
+          {% endif %}
           {% endfor %}
         </div>
       </div>
     </div>
 
-    {# ══ SECTION 2: TAGS & CONTEXT ══ #}
+    {# ── SECTION 2: TAGS ── #}
     <div class="section-card anim-fade-up anim-delay-2">
       <div class="section-card-title">② Tags &amp; Context</div>
       {% if tags %}
@@ -206,122 +240,494 @@
         {% endfor %}
       </div>
       {% else %}
-      <p style="font-size:11px;color:var(--text3)">No tags found across sources.</p>
+      <p style="font-size:13px;color:var(--text3)">No tags found.</p>
       {% endif %}
-
       {% if metadata %}
       <div class="divider"></div>
       <table class="info-table">
         {% for key, val in metadata.items() %}
         {% if val and key not in ['tags'] %}
-        <tr>
-          <td>{{ key.replace('_',' ').capitalize() }}</td>
-          <td>{{ val }}</td>
-        </tr>
-        {% endif %}
-        {% endfor %}
+        <tr><td>{{ key.replace('_',' ').capitalize() }}</td><td>{{ val }}</td></tr>
+        {% endif %}{% endfor %}
       </table>
       {% endif %}
     </div>
 
-    {# ══ SECTION 5: CORRELATION GRAPH ══ #}
-    </div>{# end results-main #}
+    {# ── SECTION 3: TIMELINE ── #}
+    <div class="section-card anim-fade-up anim-delay-3">
+      <div class="section-card-title">③ Activity Timeline</div>
+      {% if timeline %}
+      <div>
+        {% for event in timeline %}
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:var(--v-{{ event.verdict or 'unknown' }})"></div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+              <span class="timeline-summary">{{ event.summary }}</span>
+              {% if event.link %}
+              <a class="timeline-src-badge" href="{{ event.link }}" target="_blank" rel="noopener">↗ {{ event.label }}</a>
+              {% else %}
+              <span class="timeline-src-badge">{{ event.label }}</span>
+              {% endif %}
+            </div>
+            {% if event.date %}
+            <div class="timeline-time">{{ event.date[:19].replace('T',' ') }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="font-size:13px;color:var(--text3)">No timeline events.</p>
+      {% endif %}
+    </div>
+
+    {# ── SECTION 4: TECHNICAL INFO ── #}
+    <div class="section-card anim-fade-up anim-delay-4">
+      <div class="section-card-title">④ Technical Information</div>
+      <div class="tab-nav">
+        {% if ioc.type.value == 'ip' %}
+        <button class="tab-btn active" onclick="switchTab('tab-network',this)">Network</button>
+        <button class="tab-btn" onclick="switchTab('tab-ports',this)">Ports</button>
+        {% endif %}
+        {% if ioc.type.value in ['ip','domain','url','email'] %}
+        <button class="tab-btn {% if ioc.type.value != 'ip' %}active{% endif %}"
+                onclick="switchTab('tab-whois',this)">WHOIS</button>
+        {% endif %}
+        {% if ioc.type.value in ['domain','url','email'] %}
+        <button class="tab-btn" onclick="switchTab('tab-dns',this)">DNS</button>
+        {% endif %}
+        {% if ioc.type.value in ['domain','url'] %}
+        <button class="tab-btn" onclick="switchTab('tab-screenshot',this)">Screenshot</button>
+        {% endif %}
+        {% if ioc.type.value == 'hash' %}
+        <button class="tab-btn active" onclick="switchTab('tab-file',this)">File Info</button>
+        {% endif %}
+        {% if ioc.type.value == 'email' %}
+        <button class="tab-btn" onclick="switchTab('tab-email',this)">Email OSINT</button>
+        {% endif %}
+      </div>
+
+      {# TAB: NETWORK #}
+      {% if ioc.type.value == 'ip' %}
+      <div class="tab-panel active" id="tab-network">
+        <table class="info-table">
+          <tr><td>IP</td><td style="font-family:'Space Mono',monospace">{{ ioc.value }}</td></tr>
+          {% if unified.hostnames %}<tr><td>PTR / rDNS</td><td>{{ unified.hostnames | join(', ') }}</td></tr>{% endif %}
+          {% if unified.asn %}<tr><td>ASN</td><td>{{ unified.asn }}</td></tr>{% endif %}
+          {% if unified.org %}<tr><td>Organization</td><td>{{ unified.org }}</td></tr>{% endif %}
+          {% if unified.isp %}<tr><td>ISP</td><td>{{ unified.isp }}</td></tr>{% endif %}
+          {% if unified.network %}<tr><td>Network</td><td>{{ unified.network }}</td></tr>{% endif %}
+          {% if unified.country %}<tr><td>Country</td><td>{{ unified.country }}</td></tr>{% endif %}
+          {% if unified.city %}<tr><td>City</td><td>{{ unified.city }}</td></tr>{% endif %}
+          {% if unified.usage_type %}<tr><td>Usage Type</td><td>{{ unified.usage_type }}</td></tr>{% endif %}
+          {# Tri-state network flags #}
+          {% for flag_label, flag_val in [
+            ('Tor Exit Node', unified.is_tor),
+            ('VPN',           unified.is_vpn),
+            ('Proxy',         unified.is_proxy),
+            ('Hosting / DC',  unified.is_hosting),
+            ('Scanner',       unified.is_scanner),
+            ('Mobile',        unified.is_mobile),
+            ('Darkweb',       unified.is_darkweb),
+          ] %}
+          {% if flag_val is not none %}
+          <tr>
+            <td>{{ flag_label }}</td>
+            <td {% if flag_val %}style="color:var(--v-malicious);font-weight:600"
+                {% else %}style="color:var(--v-clean)"{% endif %}>
+              {{ 'Yes' if flag_val else 'No' }}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+          {% if unified.is_tor is none and unified.is_vpn is none %}
+          <tr><td>VPN / Tor / Proxy</td><td style="color:var(--text3);font-style:italic">Not checked</td></tr>
+          {% endif %}
+          {% if unified.technologies %}<tr><td>Technologies</td><td>{{ unified.technologies | join(', ') }}</td></tr>{% endif %}
+        </table>
+      </div>
+
+      {# TAB: PORTS #}
+      <div class="tab-panel" id="tab-ports">
+        {% if merged_ports %}
+        <table class="info-table">
+          <thead><tr>
+            <td style="font-weight:600;color:var(--text3)">Port</td>
+            <td style="font-weight:600;color:var(--text3)">Service</td>
+            <td style="font-weight:600;color:var(--text3)">Source</td>
+          </tr></thead>
+          <tbody>
+          {% for port in merged_ports %}
+          {% set svc_info = merged_services.get(port, {}) %}
+          {% set svc_name = svc_info.get('service', '') %}
+          <tr>
+            <td class="{% if port in [4444,8080,8888,1337,31337,9001,6667,4899] %}port-warn{% endif %}"
+                style="font-family:'Space Mono',monospace">{{ port }}</td>
+            <td style="font-family:'Space Mono',monospace;font-size:12px">
+              {% if svc_name %}{{ svc_name }}
+              {% elif port == 21 %}FTP{% elif port == 22 %}SSH{% elif port == 23 %}Telnet
+              {% elif port == 25 %}SMTP{% elif port == 53 %}DNS{% elif port == 80 %}HTTP
+              {% elif port == 110 %}POP3{% elif port == 143 %}IMAP
+              {% elif port in [443,8443] %}HTTPS{% elif port in [465,587] %}SMTP/S
+              {% elif port == 993 %}IMAPS{% elif port == 995 %}POP3S
+              {% elif port == 1433 %}MSSQL{% elif port == 3306 %}MySQL
+              {% elif port == 3389 %}RDP{% elif port == 5432 %}PostgreSQL
+              {% elif port == 5900 %}VNC{% elif port == 6379 %}Redis
+              {% elif port in [8080,8888] %}HTTP-alt{% elif port == 9200 %}Elasticsearch
+              {% elif port == 27017 %}MongoDB
+              {% elif port in [4444,1337,31337,9001,6667] %}⚠ Suspicious
+              {% else %}—{% endif %}
+            </td>
+            <td style="font-size:12px;color:var(--text3)">{{ port_source.get(port,'') | capitalize }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p style="font-size:13px;color:var(--text3)">
+          {% if not unified.shodan_ok and sources.get('criminalip',{}).get('status') != 'ok' %}
+          Shodan and Criminal IP keys not configured.
+          {% else %}No open ports found.{% endif %}
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# TAB: WHOIS #}
+      {% if ioc.type.value in ['ip','domain','url','email'] %}
+      <div class="tab-panel {% if ioc.type.value != 'ip' %}active{% endif %}" id="tab-whois">
+        {% if unified.registrar or unified.creation_date or unified.expiry_date or unified.hostnames %}
+        <table class="info-table">
+          {% if unified.registrar %}<tr><td>Registrar</td><td>{{ unified.registrar }}</td></tr>{% endif %}
+          {% if unified.creation_date %}<tr><td>Created</td><td>{{ unified.creation_date }}</td></tr>{% endif %}
+          {% if unified.expiry_date %}<tr><td>Expires</td><td>{{ unified.expiry_date }}</td></tr>{% endif %}
+          {% if unified.hostnames %}<tr><td>Resolves to</td><td>{{ unified.hostnames | join(', ') }}</td></tr>{% endif %}
+        </table>
+        {% else %}
+        <p style="font-size:13px;color:var(--text3)">
+          {% if not unified.st_ok %}WHOIS unavailable — SecurityTrails key not configured.
+          {% else %}No WHOIS data found.{% endif %}
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# TAB: DNS #}
+      {% if ioc.type.value in ['domain','url','email'] %}
+      <div class="tab-panel" id="tab-dns">
+        {% if unified.dns_records %}
+        {% for record_type, records in unified.dns_records.items() %}
+        <div style="margin-bottom:14px">
+          <div style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.12em;
+                      text-transform:uppercase;color:var(--text3);margin-bottom:6px">
+            {{ record_type }} Records
+          </div>
+          {% if records is mapping %}
+            {% set rec_list = (records.get('values') or [])[:8] %}
+          {% else %}
+            {% set rec_list = (records or [])[:8] %}
+          {% endif %}
+          {% for rec in rec_list %}
+          <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--text);
+                      padding:4px 10px;background:var(--bg3);border-radius:5px;margin-bottom:3px">
+            {% if rec is mapping %}{{ rec.get('ip') or rec.get('value') or rec.get('address') or rec | string }}
+            {% else %}{{ rec | string }}{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="font-size:13px;color:var(--text3)">DNS records unavailable.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# TAB: SCREENSHOT #}
+      {% if ioc.type.value in ['domain','url'] %}
+      <div class="tab-panel" id="tab-screenshot">
+        {% if unified.screenshot_url %}
+        <div class="screenshot-frame" style="position:relative">
+          <img src="{{ unified.screenshot_url }}"
+               alt="Screenshot of {{ ioc.value }}"
+               style="width:100%;border-radius:10px;display:block"
+               onerror="this.style.display='none';document.getElementById('ss-fallback').style.display='flex'">
+          <div id="ss-fallback" style="display:none;align-items:center;justify-content:center;
+               height:120px;color:var(--text3);font-size:13px;flex-direction:column;gap:8px">
+            <span>Screenshot could not load</span>
+            <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
+               style="font-size:11px;color:var(--blue)">Open directly ↗</a>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          {% if unified.http_status %}
+          <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
+            HTTP {{ unified.http_status }}
+          </span>
+          {% endif %}
+          {% if unified.http_title %}
+          <span style="font-size:13px;color:var(--text2)">"{{ unified.http_title[:60] }}"</span>
+          {% endif %}
+          <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
+             style="margin-left:auto;font-size:12px;color:var(--text3)">Full screenshot ↗</a>
+        </div>
+        {% if unified.technologies %}
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px">
+          {% for tech in unified.technologies[:8] %}
+          <span style="font-size:12px;padding:2px 9px;background:var(--bg3);
+                       border-radius:5px;border:1px solid var(--border);color:var(--text2)">
+            {{ tech }}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if unified.redirects %}
+        <div style="margin-top:10px;font-size:12px;color:var(--text3);line-height:1.6">
+          Redirects:
+          {% for r in unified.redirects[:3] %}
+          <span style="font-family:'Space Mono',monospace">{{ r[:70] }}</span>{% if not loop.last %} →{% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% else %}
+        <div style="display:flex;align-items:center;justify-content:center;height:100px;
+             color:var(--text3);font-size:13px;flex-direction:column;gap:6px">
+          <span>{% if not unified.urlscan_ok %}URLScan.io key not configured
+                {% else %}No screenshot available{% endif %}</span>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# TAB: FILE INFO #}
+      {% if ioc.type.value == 'hash' %}
+      <div class="tab-panel active" id="tab-file">
+        <table class="info-table">
+          {% if unified.file_name %}<tr><td>File Name</td><td style="font-family:'Space Mono',monospace;font-size:12px">{{ unified.file_name }}</td></tr>{% endif %}
+          {% if unified.file_type %}<tr><td>File Type</td><td>{{ unified.file_type }}</td></tr>{% endif %}
+          {% if unified.file_size %}<tr><td>File Size</td><td>{{ unified.file_size }} bytes</td></tr>{% endif %}
+          {% if unified.malware_family %}
+          <tr><td>Malware Family</td>
+            <td style="color:var(--v-malicious);font-weight:600">{{ unified.malware_family }}</td></tr>
+          {% endif %}
+          {% if unified.first_submission %}
+          <tr><td>First Seen</td>
+            <td>{% set fs = unified.first_submission %}
+            {% if fs is number %}{{ (fs|string)[:10] }}{% else %}{{ fs|string|truncate(19,killwords=True,end='') }}{% endif %}
+            </td></tr>
+          {% endif %}
+          <tr><td>Hash</td><td style="font-family:'Space Mono',monospace;font-size:11px;word-break:break-all">{{ ioc.value }}</td></tr>
+        </table>
+        {% if unified.mb_ok %}
+        <p style="font-size:13px;color:var(--v-malicious);margin-top:10px;font-weight:500">
+          ⚠ Found in MalwareBazaar — confirmed malware sample
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# TAB: EMAIL OSINT #}
+      {% if ioc.type.value == 'email' %}
+      <div class="tab-panel" id="tab-email">
+        {% if unified.email_reports %}
+        <div style="margin-bottom:14px">
+          <div class="section-label" style="margin-bottom:8px">StopForumSpam</div>
+          <table class="info-table">
+            <tr><td>Reports</td><td>{{ unified.email_reports }}</td></tr>
+            <tr><td>Status</td>
+              <td style="color:var(--v-{{ unified.sfs_verdict }})">{{ unified.sfs_verdict | capitalize }}</td></tr>
+            {% if unified.sfs_confidence %}<tr><td>Confidence</td><td>{{ unified.sfs_confidence | int }}%</td></tr>{% endif %}
+            {% if unified.sfs_country %}<tr><td>Reporter country</td><td>{{ unified.sfs_country }}</td></tr>{% endif %}
+          </table>
+        </div>
+        {% endif %}
+        {% if unified.username_hits %}
+        <div class="divider"></div>
+        <div class="section-label" style="margin-bottom:8px">
+          WhatsMyName — {{ unified.username_hits | length }} platform(s) found
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          {% for hit in unified.username_hits %}
+          <a href="{{ hit.url }}" target="_blank" rel="noopener" class="source-pill ok">
+            {{ hit.site }}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if not unified.email_reports and not unified.username_hits %}
+        <p style="font-size:13px;color:var(--text3)">No email OSINT data found.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>{# end section-card tech info #}
+
+  </div>{# end results-main #}
+
+  {# ═══ COLUMN 2: RIGHT SIDEBAR ═══ #}
+  <div class="results-side">
+
+    {# ── INTELLIGENCE SOURCES ── #}
+    <div class="section-card anim-fade-up anim-delay-2">
+      <div class="section-card-title">⑤ Intelligence Sources</div>
+      {% set source_meta = [
+        ('virustotal',    'VirusTotal'),
+        ('abuseipdb',     'AbuseIPDB'),
+        ('shodan',        'Shodan'),
+        ('pulsedive',     'Pulsedive'),
+        ('criminalip',    'Criminal IP'),
+        ('malwarebazaar', 'MalwareBazaar'),
+        ('urlscan',       'URLScan.io'),
+        ('securitytrails','SecurityTrails'),
+        ('stopforumspam', 'StopForumSpam'),
+        ('whatsmyname',   'WhatsMyName'),
+      ] %}
+      {% for src_key, src_label in source_meta %}
+        {% set src    = sources.get(src_key, {}) %}
+        {% set status = src.get('status', 'skipped') %}
+        {% set hint   = src.get('verdict_hint') or 'unknown' %}
+        {% set active = status == 'ok' %}
+        {% set dimmed = status in ('skipped', 'no_key') %}
+        {# Build summary text #}
+        {% if active %}
+          {% if src_key == 'virustotal' %}{% set summary = unified.malicious_count|string ~ '/' ~ unified.total_engines|string ~ ' engines' %}
+          {% elif src_key == 'abuseipdb' %}{% set summary = 'Abuse score ' ~ (unified.abuse_score or 0)|string ~ '%' %}
+          {% elif src_key == 'shodan' %}{% set summary = (src.get('ports') or [])|length|string ~ ' ports found' %}
+          {% elif src_key == 'pulsedive' %}
+            {% if src.get('ports') %}{% set summary = 'Scanned · ' ~ src.get('ports')|length|string ~ ' ports' %}
+            {% else %}{% set summary = 'Scanned · ' ~ (hint | capitalize) %}{% endif %}
+          {% elif src_key == 'criminalip' %}
+            {% if src.get('abuse_score') is not none %}{% set summary = 'Risk score ' ~ src.get('abuse_score')|string ~ '/100' %}
+            {% else %}{% set summary = hint | capitalize %}{% endif %}
+          {% elif src_key == 'malwarebazaar' %}
+            {% if src.get('file_name') %}{% set summary = src.get('malware_family') or 'Malware detected' %}
+            {% else %}{% set summary = 'Not in database' %}{% endif %}
+          {% elif src_key == 'stopforumspam' %}{% set summary = (src.get('email_reports',0))|string ~ ' abuse reports' %}
+          {% elif src_key == 'urlscan' %}
+            {% if src.get('http_title') %}{% set summary = '"' ~ src.get('http_title')[:28] ~ '"' %}
+            {% elif src.get('screenshot_url') %}{% set summary = 'Page captured' %}
+            {% else %}{% set summary = 'Scan complete' %}{% endif %}
+          {% elif src_key == 'securitytrails' %}
+            {% if src.get('dns_records') %}{% set summary = 'DNS records found' %}
+            {% elif src.get('registrar') %}{% set summary = src.get('registrar') %}
+            {% else %}{% set summary = 'Domain data' %}{% endif %}
+          {% elif src_key == 'whatsmyname' %}
+            {% set n = (src.get('username_hits') or [])|length %}
+            {% if n > 0 %}{% set summary = 'Found on ' ~ n|string ~ ' platform' ~ ('s' if n != 1 else '') %}
+            {% else %}{% set summary = 'No accounts found' %}{% endif %}
+          {% else %}{% set summary = hint | capitalize %}{% endif %}
+        {% elif status == 'no_key' %}{% set summary = 'API key not set up' %}
+        {% elif status == 'skipped' %}{% set summary = 'Not applicable for ' ~ ioc.type.value ~ 's' %}
+        {% elif status == 'error' %}{% set summary = src.get('error','Connection failed') | truncate(32) %}
+        {% elif status == 'timeout' %}{% set summary = 'Request timed out' %}
+        {% else %}{% set summary = '—' %}{% endif %}
+
+        <div class="source-row" style="{% if dimmed %}opacity:0.38;{% elif status == 'error' %}opacity:0.55;{% endif %}">
+          {% if active %}<span class="source-dot" style="background:var(--v-{{ hint }})"></span>
+          {% elif status == 'error' %}<span class="source-dot" style="background:var(--v-suspicious)"></span>
+          {% else %}<span class="source-dot" style="background:var(--border2)"></span>{% endif %}
+          <span class="source-name" style="color:{% if active %}var(--text){% else %}var(--text3){% endif %}">
+            {{ src_label }}
+          </span>
+          <span class="source-summary"
+                style="color:{% if active %}var(--text2){% elif status=='error' %}var(--v-suspicious){% else %}var(--text3){% endif %};
+                       font-style:{% if dimmed %}italic{% else %}normal{% endif %}">
+            {{ summary }}
+          </span>
+          {% if active and source_links %}
+          <a class="source-link" href="{{ source_links.get(src_key,'#') }}"
+             target="_blank" rel="noopener">↗</a>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    {# ── GEOLOCATION (IP only) ── #}
+    {% if ioc.type.value == 'ip' and geo %}
+    <div class="section-card anim-fade-up anim-delay-3">
+      <div class="section-card-title">⑥ Geolocation</div>
+      <div id="geo-map" style="height:160px;border-radius:10px;overflow:hidden;
+           background:var(--bg3);margin-bottom:12px"></div>
+      <table class="info-table" style="margin-top:0">
+        {% if unified.country %}<tr><td>Country</td><td>{{ unified.country }}</td></tr>{% endif %}
+        {% if unified.city    %}<tr><td>City</td><td>{{ unified.city }}</td></tr>{% endif %}
+        {% if unified.org     %}<tr><td>Org</td><td>{{ unified.org }}</td></tr>{% endif %}
+        {% if unified.asn     %}<tr><td>ASN</td><td>{{ unified.asn }}</td></tr>{% endif %}
+        {% if unified.isp     %}<tr><td>ISP</td><td>{{ unified.isp }}</td></tr>{% endif %}
+        {% if unified.network %}<tr><td>Network</td><td>{{ unified.network }}</td></tr>{% endif %}
+      </table>
+    </div>
+    {% endif %}
+
+    {# ── SCAN HISTORY ── #}
+    {% if history | length > 1 %}
+    <div class="section-card anim-fade-up anim-delay-4">
+      <div class="section-card-title">Scan History</div>
+      {% for h in history[:6] %}
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
+           border-bottom:1px solid var(--border);font-size:12px">
+        <span class="badge badge-{{ h.verdict.value if h.verdict else 'unknown' }}"
+              style="font-size:9px">{{ h.verdict.value if h.verdict else '?' }}</span>
+        <span style="font-family:'Space Mono',monospace;color:var(--text2)">{{ h.score }}/100</span>
+        <span style="flex:1;color:var(--text3);font-size:11px">
+          {{ h.scanned_at.strftime('%Y-%m-%d %H:%M') if h.scanned_at else '' }}
+        </span>
+        <span style="font-size:10px;color:var(--text3)">
+          {{ h.triggered_by.value if h.triggered_by else '' }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
   </div>{# end results-side #}
-  </div>{# end results-grid #}
 
-  {# ══ GRAPH — Full-width below main grid ══ #}
-  <div class="graph-card anim-fade-up anim-delay-3" style="margin-top:20px">
-    <div class="graph-header">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="var(--text3)" stroke-width="2" stroke-linecap="round">
-        <circle cx="12" cy="12" r="3"/>
-        <circle cx="4" cy="6" r="2"/><line x1="6" y1="6" x2="9" y2="10"/>
-        <circle cx="20" cy="6" r="2"/><line x1="18" y1="6" x2="15" y2="10"/>
-        <circle cx="4" cy="18" r="2"/><line x1="6" y1="18" x2="9" y2="14"/>
-        <circle cx="20" cy="18" r="2"/><line x1="18" y1="18" x2="15" y2="14"/>
-      </svg>
-      <div class="graph-title">⑤ Correlation Graph</div>
-      <span style="font-family:'Space Mono',monospace;font-size:10px;
-                   color:var(--text3);margin-left:auto">
-        Click any node for details
-      </span>
-      <a href="/graph" target="_blank"
-         style="font-family:'Space Mono',monospace;font-size:10px;
-                color:var(--text3);padding:4px 12px;border-radius:7px;
-                border:1px solid var(--border);margin-left:10px;
-                transition:all 0.15s;white-space:nowrap"
-         onmouseover="this.style.borderColor='var(--teal)';this.style.color='var(--teal)'"
-         onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
-        Full graph ↗
-      </a>
-    </div>
-    <div class="graph-body">
-      {# Canvas area — expands to fill #}
-      <div class="graph-canvas-area">
+  {# ═══ COLUMN 3: CORRELATION GRAPH ═══ #}
+  <div class="results-graph anim-fade-up anim-delay-2">
+    <div class="section-card" style="padding:0;overflow:hidden">
+      {# Header #}
+      <div style="display:flex;align-items:center;gap:10px;
+           padding:14px 16px;border-bottom:1px solid var(--border)">
+        <div class="section-card-title" style="margin:0;flex:1">
+          ⑦ Correlation Graph
+        </div>
+        <a href="/graph" target="_blank"
+           style="font-family:'Space Mono',monospace;font-size:10px;
+                  color:var(--text3);transition:color 0.15s"
+           onmouseover="this.style.color='var(--teal)'"
+           onmouseout="this.style.color='var(--text3)'">↗ Full</a>
+      </div>
+      {# Graph canvas #}
+      <div class="graph-wrap" style="border-radius:0;border:none">
         <div id="graph-container" data-ioc-id="{{ ioc.id }}"
-             style="height:480px;position:relative">
-          <div class="graph-empty">
-            <span style="font-size:28px;opacity:0.2">◎</span>
-            <span style="font-size:13px">Loading graph...</span>
+             style="height:340px;position:relative">
+          <div id="graph-loading"
+               style="position:absolute;inset:0;display:flex;flex-direction:column;
+                      align-items:center;justify-content:center;gap:8px;color:var(--text3)">
+            <span style="font-size:24px;opacity:0.2">◎</span>
+            <span style="font-size:12px">Loading graph...</span>
           </div>
         </div>
       </div>
-      {# Info panel — right sidebar of graph #}
-      <div class="graph-info-panel" id="graph-info-panel">
+      {# Node detail panel #}
+      <div class="graph-info-panel">
         <div id="graph-empty-state"
-             style="height:100%;display:flex;flex-direction:column;
-                    align-items:center;justify-content:center;
-                    gap:10px;color:var(--text3);text-align:center;padding:20px">
-          <span style="font-size:32px;opacity:0.15">◉</span>
+             style="display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;gap:8px;color:var(--text3);
+                    text-align:center;padding:16px 0">
+          <span style="font-size:22px;opacity:0.15">◉</span>
           <span style="font-family:'Space Mono',monospace;font-size:10px;
-                       letter-spacing:0.14em;text-transform:uppercase">
-            Select a node
-          </span>
-          <span style="font-size:13px;line-height:1.6;color:var(--text3)">
-            Click any indicator in the graph to see its details here
+                       letter-spacing:0.14em;text-transform:uppercase">Select a node</span>
+          <span style="font-size:12px;color:var(--text3);line-height:1.5;max-width:180px">
+            Click any node to see details
           </span>
         </div>
-        <div id="graph-node-detail" style="display:none">
-          <div style="font-family:'Outfit',sans-serif;font-size:17px;font-weight:600;
-                      color:var(--text);margin-bottom:10px;word-break:break-all;
-                      line-height:1.3"
-               id="tt-label"></div>
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-            <span class="badge" id="tt-verdict-badge"></span>
-            <span style="font-family:'Space Mono',monospace;font-size:10px;
-                         color:var(--text3)" id="tt-source-label"></span>
-          </div>
-          <div style="font-size:13px;color:var(--text3);margin-bottom:16px;
-                      line-height:1.6;padding:10px 0;border-top:1px solid var(--border)"
-               id="tt-reason"></div>
-          <div id="tt-score-row" style="margin-bottom:16px">
-            <div style="font-family:'Space Mono',monospace;font-size:10px;
-                        color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;
-                        margin-bottom:4px">Risk Score</div>
-            <div style="font-family:'Outfit',sans-serif;font-size:32px;font-weight:800;
-                        letter-spacing:-0.02em;color:var(--text)" id="tt-score"></div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <button id="tt-analyze" class="btn btn-primary"
-                    style="width:100%;justify-content:center;display:none">
-              Analyze this indicator →
-            </button>
-            <button id="tt-copy"
-                    onclick="copyNodeValue()"
-                    style="width:100%;padding:9px;border-radius:9px;
-                           background:var(--bg3);border:1px solid var(--border);
-                           color:var(--text2);font-size:13px;font-family:'Outfit',sans-serif;
-                           font-weight:500;cursor:pointer;transition:all 0.15s"
-                    onmouseover="this.style.background='var(--bg4)'"
-                    onmouseout="this.style.background='var(--bg3)'">
-              Copy value
-            </button>
-          </div>
-        </div>
+        <div id="graph-node-detail" style="display:none"></div>
       </div>
     </div>
-  </div>
+  </div>{# end results-graph #}
+
+  </div>{# end results-layout #}
 
 </div>
 {% endblock %}
@@ -329,7 +735,6 @@
 {% block scripts %}
 <script src="/static/js/app.js"></script>
 <script>
-// ── Tab switching ──────────────────────────────────────────────────────
 function switchTab(panelId, btn) {
   const card = btn.closest('.section-card');
   card.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -338,75 +743,57 @@ function switchTab(panelId, btn) {
   if (panel) panel.classList.add('active');
   btn.classList.add('active');
 }
-
-// ── Copy to clipboard ─────────────────────────────────────────────────
-function copyToClipboard(text) {
-  navigator.clipboard?.writeText(text).then(() => {
-    const btn = document.querySelector('[onclick*="copyToClipboard"]');
-    if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = orig, 1500); }
-  });
+function copyToClipboard(v) {
+  navigator.clipboard?.writeText(v);
 }
+function copyNodeValue() {
+  const label = document.getElementById('graph-node-detail')?.querySelector('[data-value]')?.dataset?.value;
+  if (label) navigator.clipboard?.writeText(label);
+}
+</script>
 
-// ── Geo map (Leaflet) ─────────────────────────────────────────────────
 {% if ioc.type.value == 'ip' and geo %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script>
 (function() {
   const mapEl = document.getElementById('geo-map');
   if (!mapEl) return;
-
-  function renderMap(lat, lon) {
-    const isDark = document.body.classList.contains('dark');
-    const tileUrl = isDark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-    try {
-      const map = L.map('geo-map', {
-        zoomControl: false, attributionControl: false,
-        scrollWheelZoom: false,
-      }).setView([lat, lon], 7);
-      L.tileLayer(tileUrl, { maxZoom: 18 }).addTo(map);
-      const icon = L.divIcon({
-        className: '',
-        html: '<div style="width:14px;height:14px;background:var(--accent);border-radius:50%;border:2.5px solid rgba(255,255,255,0.7);box-shadow:0 0 10px rgba(224,92,92,0.6)"></div>',
-        iconSize: [14,14], iconAnchor: [7,7]
-      });
-      L.marker([lat, lon], {icon}).addTo(map);
-    } catch(e) {
-      mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px">Map error</div>';
-    }
-  }
-
   function showFallback() {
-    mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px;flex-direction:column;gap:4px"><span style="font-size:20px;opacity:0.3">⊙</span><span>Location data unavailable</span></div>';
+    mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">Location unavailable</div>';
   }
-
-  // Load Leaflet then resolve coordinates
   const script = document.createElement('script');
   script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
   script.onerror = showFallback;
   script.onload = () => {
-    // Try 1: use lat/lon already in unified data (from Pulsedive or other sources)
+    function renderMap(lat, lng) {
+      const isDark = document.body.classList.contains('dark');
+      const map = L.map('geo-map', {zoomControl:false,attributionControl:false,
+        dragging:false,scrollWheelZoom:false}).setView([lat,lng],6);
+      L.tileLayer(isDark
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        {subdomains:'abcd',maxZoom:19}).addTo(map);
+      L.circleMarker([lat,lng],{radius:6,color:'var(--accent)',fillColor:'var(--accent)',
+        fillOpacity:0.85,weight:2}).addTo(map);
+    }
     {% if unified.latitude and unified.longitude %}
     renderMap({{ unified.latitude }}, {{ unified.longitude }});
     {% else %}
-    // Try 2: ipapi.co
-    fetch('https://ipapi.co/{{ ioc.value }}/json/', {headers: {'Accept': 'application/json'}})
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(d => {
-      if (d.error || !d.latitude) throw new Error('no coords');
-      renderMap(d.latitude, d.longitude);
-    })
-    .catch(() => {
-      // Try 3: ip-api.com
+    fetch('https://ipapi.co/{{ ioc.value }}/json/',{headers:{'Accept':'application/json'}})
+    .then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
+    .then(d=>{if(d.error||!d.latitude)throw new Error('no coords');renderMap(d.latitude,d.longitude);})
+    .catch(()=>{
       fetch('https://ip-api.com/json/{{ ioc.value }}?fields=lat,lon,status')
-      .then(r => r.json())
-      .then(d => { if (d.status === 'success') renderMap(d.lat, d.lon); else showFallback(); })
+      .then(r=>r.json())
+      .then(d=>{if(d.status==='success')renderMap(d.lat,d.lon);else showFallback();})
       .catch(showFallback);
     });
     {% endif %}
   };
   document.head.appendChild(script);
 })();
-{% endif %}
 </script>
+{% endif %}
+
 <script src="/static/js/graph.js"></script>
 {% endblock %}
