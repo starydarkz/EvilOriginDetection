@@ -647,38 +647,105 @@
       ] %}
 
       {% for src_key, src_label in source_meta %}
-        {% set src = sources.get(src_key, {}) %}
+        {% set src    = sources.get(src_key, {}) %}
         {% set status = src.get('status', 'skipped') %}
-        {% set hint = src.get('verdict_hint') or 'unknown' %}
-        {% set dot_color = 'var(--v-' ~ hint ~ ')' if status == 'ok' else 'var(--border2)' %}
-        <div class="source-row {{ 'no-key' if status == 'no_key' else '' }} {{ 'error' if status == 'error' else '' }}">
-          <span class="source-dot" style="background:{{ dot_color }}"></span>
-          <span class="source-name">{{ src_label }}</span>
-          <span class="source-summary">
-            {% if status == 'ok' %}
-              {% if src_key == 'virustotal' %}{{ src.get('malicious_count',0) }}/{{ src.get('total_engines',0) }} engines
-              {% elif src_key == 'abuseipdb' %}{{ src.get('abuse_score',0) }}% abuse
-              {% elif src_key == 'shodan' %}{{ (src.get('ports') or []) | length }} open ports
-              {% elif src_key == 'pulsedive' %}
-                {{ src.get('pulse_count',0) }} feeds
-                {% if src.get('ports') %} · {{ src.get('ports')|length }} ports{% endif %}
-              {% elif src_key == 'criminalip' %}
-                {% if src.get('abuse_score') is not none %}Score {{ src.get('abuse_score') }}{% else %}{{ (hint or 'unknown') | capitalize }}{% endif %}
-              {% elif src_key == 'malwarebazaar' %}{{ src.get('malware_family') or 'Found' if src.get('file_name') else 'Not found' }}
-              {% elif src_key == 'stopforumspam' %}{{ src.get('email_reports',0) }} reports
-              {% elif src_key == 'urlscan' %}
-                {% if src.get('screenshot_url') %}Screenshot{% else %}Scanned{% endif %}
-                {% if src.get('http_title') %} · "{{ src.get('http_title')[:30] }}"{% endif %}
-              {% elif src_key == 'whatsmyname' %}
-                {{ (src.get('username_hits') or []) | length }} platform(s) found
-              {% else %}{{ (hint or 'unknown') | capitalize }}{% endif %}
-            {% elif status == 'no_key' %}No key configured
-            {% elif status == 'skipped' %}N/A for {{ ioc.type.value }}
-            {% elif status == 'error' %}{{ src.get('error','Error') | truncate(35) }}
-            {% elif status == 'timeout' %}Timeout
-            {% else %}—{% endif %}
+        {% set hint   = src.get('verdict_hint') or 'unknown' %}
+        {% set active = status == 'ok' %}
+        {% set dimmed = status in ('skipped', 'no_key') %}
+
+        {# ── Summary text per source ─────────────────────────── #}
+        {% if active %}
+          {% if src_key == 'virustotal' %}
+            {% set summary = src.get('malicious_count',0)|string ~ '/' ~ src.get('total_engines',0)|string ~ ' engines flagged' %}
+          {% elif src_key == 'abuseipdb' %}
+            {% set summary = 'Abuse score ' ~ src.get('abuse_score',0)|string ~ '%' %}
+          {% elif src_key == 'shodan' %}
+            {% set n = (src.get('ports') or []) | length %}
+            {% set summary = n|string ~ ' open port' ~ ('s' if n != 1 else '') ~ ' found' %}
+          {% elif src_key == 'pulsedive' %}
+            {% set n = (src.get('ports') or []) | length %}
+            {% if n > 0 %}
+              {% set summary = 'Scanned · ' ~ n|string ~ ' port' ~ ('s' if n != 1 else '') %}
+            {% else %}
+              {% set summary = 'Scanned · ' ~ (hint | capitalize) %}
+            {% endif %}
+          {% elif src_key == 'criminalip' %}
+            {% if src.get('abuse_score') is not none %}
+              {% set summary = 'Risk score ' ~ src.get('abuse_score')|string ~ '/100' %}
+            {% else %}
+              {% set summary = hint | capitalize %}
+            {% endif %}
+          {% elif src_key == 'malwarebazaar' %}
+            {% if src.get('file_name') %}
+              {% set summary = src.get('malware_family') or 'Malware detected' %}
+            {% else %}
+              {% set summary = 'Not in database' %}
+            {% endif %}
+          {% elif src_key == 'stopforumspam' %}
+            {% set freq = src.get('email_reports', 0) %}
+            {% set summary = freq|string ~ ' abuse report' ~ ('s' if freq != 1 else '') %}
+          {% elif src_key == 'urlscan' %}
+            {% if src.get('http_title') %}
+              {% set summary = '"' ~ src.get('http_title')[:35] ~ '"' %}
+            {% elif src.get('screenshot_url') %}
+              {% set summary = 'Page captured' %}
+            {% else %}
+              {% set summary = 'Scan complete' %}
+            {% endif %}
+          {% elif src_key == 'securitytrails' %}
+            {% if src.get('dns_records') %}
+              {% set summary = 'DNS records found' %}
+            {% elif src.get('registrar') %}
+              {% set summary = src.get('registrar') %}
+            {% else %}
+              {% set summary = 'Domain data retrieved' %}
+            {% endif %}
+          {% elif src_key == 'whatsmyname' %}
+            {% set n = (src.get('username_hits') or []) | length %}
+            {% if n > 0 %}
+              {% set summary = 'Found on ' ~ n|string ~ ' platform' ~ ('s' if n != 1 else '') %}
+            {% else %}
+              {% set summary = 'No accounts found' %}
+            {% endif %}
+          {% else %}
+            {% set summary = hint | capitalize %}
+          {% endif %}
+        {% elif status == 'no_key' %}
+          {% set summary = 'API key not set up' %}
+        {% elif status == 'skipped' %}
+          {% set summary = 'Not applicable for ' ~ ioc.type.value ~ 's' %}
+        {% elif status == 'error' %}
+          {% set summary = src.get('error', 'Connection failed') | truncate(40) %}
+        {% elif status == 'timeout' %}
+          {% set summary = 'Request timed out' %}
+        {% else %}
+          {% set summary = '—' %}
+        {% endif %}
+
+        <div class="source-row"
+             style="{% if dimmed %}opacity:0.38;{% endif %}
+                    {% if status == 'error' %}opacity:0.55;{% endif %}">
+          {# Dot: colored by verdict if active, gray if not applicable, orange if error #}
+          {% if active %}
+            <span class="source-dot" style="background:var(--v-{{ hint }})"></span>
+          {% elif status == 'error' %}
+            <span class="source-dot" style="background:var(--v-suspicious)"></span>
+          {% else %}
+            <span class="source-dot" style="background:var(--border2)"></span>
+          {% endif %}
+
+          <span class="source-name"
+                style="color:{% if active %}var(--text){% else %}var(--text3){% endif %}">
+            {{ src_label }}
           </span>
-          {% if status == 'ok' and source_links %}
+
+          <span class="source-summary"
+                style="color:{% if active %}var(--text2){% elif status == 'error' %}var(--v-suspicious){% else %}var(--text3){% endif %};
+                       font-style:{% if dimmed %}italic{% else %}normal{% endif %}">
+            {{ summary }}
+          </span>
+
+          {% if active and source_links %}
           <a class="source-link" href="{{ source_links.get(src_key, '#') }}"
              target="_blank" rel="noopener">↗</a>
           {% endif %}
