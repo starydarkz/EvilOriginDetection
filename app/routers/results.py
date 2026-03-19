@@ -26,6 +26,20 @@ async def results_page(
     request: Request,
     db:      AsyncSession = Depends(get_db),
 ):
+    try:
+        return await _results_page_inner(ioc_id, request, db)
+    except Exception as e:
+        tb = traceback.format_exc()
+        exc_logger.error(f"results_page failed for ioc_id={ioc_id}:\n{tb}")
+        app_logger.error(f"500 on /results/{ioc_id} — {type(e).__name__}: {e}")
+        raise
+
+
+async def _results_page_inner(
+    ioc_id:  int,
+    request: Request,
+    db:      AsyncSession,
+):
     # Load IOC with all related data
     stmt = (
         select(IOC)

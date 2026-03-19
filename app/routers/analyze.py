@@ -21,7 +21,8 @@ from app.parser import parse_input, ParsedIOC
 from app.scoring import compute_score
 from app.correlator import run_correlation
 from app.connectors.base import NormalizedResult
-from app.logger import log_query, get_client_ip
+from app.logger import log_query, get_client_ip, app_logger, exc_logger
+import traceback
 from config import get_settings, pick_key
 
 # Connector imports
@@ -99,6 +100,15 @@ async def analyze_single(
 
     # Run all connectors in parallel
     norm_results: list[NormalizedResult] = await asyncio.gather(*source_tasks)
+
+    # Log each connector result for debugging
+    for r in norm_results:
+        if r.status.value == "error":
+            app_logger.warning(f"  [{r.source}] status=error — {r.error}")
+        elif r.status.value == "ok":
+            app_logger.debug(f"  [{r.source}] ok — verdict={r.verdict_hint}")
+        else:
+            app_logger.debug(f"  [{r.source}] status={r.status.value}")
 
     # Compute score + verdict
     score, verdict = compute_score(norm_results)
@@ -204,9 +214,15 @@ async def analyze(
     # Future: batch support
     target = parsed[0]
 
-    ioc, norm_results = await analyze_single(
-        target, db, force_rescan=force_rescan
-    )
+    try:
+        ioc, norm_results = await analyze_single(
+            target, db, force_rescan=force_rescan
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        exc_logger.error(f"analyze_single failed for {target.value!r}:\n{tb}")
+        app_logger.error(f"500 on /analyze — {type(e).__name__}: {e}")
+        raise
 
     # Build correlations if more than one IOC in same session (future)
     # correlations = run_correlation({target.value: norm_results})
