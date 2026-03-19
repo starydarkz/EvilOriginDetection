@@ -63,6 +63,11 @@ async def results_page(
         norm.setdefault("redirects",  [])
         norm.setdefault("reports",    [])
         norm.setdefault("http_title", None)
+        norm.setdefault("is_proxy",   None)
+        norm.setdefault("is_hosting", None)
+        norm.setdefault("is_mobile",  None)
+        norm.setdefault("is_scanner", None)
+        norm.setdefault("is_darkweb", None)
         sources[sr.source] = {
             "status":     sr.status.value,
             "fetched_at": sr.fetched_at.isoformat() if sr.fetched_at else None,
