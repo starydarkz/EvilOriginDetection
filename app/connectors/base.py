@@ -77,6 +77,7 @@ class NormalizedResult:
         "is_mobile",
         "is_scanner",
         "is_darkweb",
+        "is_cloud",
         "is_noise",
 
         # ── ports ─────────────────────────────────────────────────

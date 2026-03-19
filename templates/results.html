@@ -6,7 +6,7 @@
 /* ── Results page layout ─────────────────────────────── */
 .results-layout {
   display: grid;
-  grid-template-columns: 1fr 320px 300px;
+  grid-template-columns: 1fr 280px 400px;
   gap: 18px;
   align-items: start;
 }
@@ -116,7 +116,7 @@
   <div class="anim-fade-up" style="display:flex;align-items:center;gap:10px;
        margin-bottom:14px;flex-wrap:wrap">
     <a href="/" class="btn btn-ghost btn-sm">← Back</a>
-    <span class="ioc-type {{ ioc.type.value }}">{{ ioc.type.value }}</span>
+    <span class="ioc-type {{ ioc.type.value }}">{{ ioc.type.value | upper }}</span>
     <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text);
                  flex:1;word-break:break-all;min-width:0">{{ ioc.value }}</span>
     <span class="badge badge-{{ ioc.verdict.value if ioc.verdict else 'unknown' }}">
@@ -244,13 +244,17 @@
       <p style="font-size:13px;color:var(--text3)">No tags found.</p>
       {% endif %}
       {% if metadata %}
+      {# Only show non-geo metadata — geo/network data lives in the dedicated sections #}
+      {% set meta_show = metadata.items() | selectattr('0', 'in', ['malware_family','file_type','registrar']) | list %}
+      {% if meta_show %}
       <div class="divider"></div>
       <table class="info-table">
-        {% for key, val in metadata.items() %}
-        {% if val and key not in ['tags'] %}
+        {% for key, val in meta_show %}
+        {% if val %}
         <tr><td>{{ key.replace('_',' ').capitalize() }}</td><td>{{ val }}</td></tr>
         {% endif %}{% endfor %}
       </table>
+      {% endif %}
       {% endif %}
     </div>
 
@@ -309,25 +313,30 @@
         {% endif %}
       </div>
 
-      {# TAB: NETWORK #}
+      {# TAB: NETWORK — network-specific fields only, geo lives in sidebar #}
       {% if ioc.type.value == 'ip' %}
       <div class="tab-panel active" id="tab-network">
         <table class="info-table">
           <tr><td>IP</td><td style="font-family:'Space Mono',monospace">{{ ioc.value }}</td></tr>
-          {% if unified.hostnames %}<tr><td>PTR / rDNS</td><td>{{ unified.hostnames | join(', ') }}</td></tr>{% endif %}
+          {% if unified.network %}<tr><td>CIDR Block</td><td style="font-family:'Space Mono',monospace;font-size:13px">{{ unified.network }}</td></tr>{% endif %}
           {% if unified.asn %}<tr><td>ASN</td><td>{{ unified.asn }}</td></tr>{% endif %}
           {% if unified.org %}<tr><td>Organization</td><td>{{ unified.org }}</td></tr>{% endif %}
-          {% if unified.isp %}<tr><td>ISP</td><td>{{ unified.isp }}</td></tr>{% endif %}
-          {% if unified.network %}<tr><td>Network</td><td>{{ unified.network }}</td></tr>{% endif %}
-          {% if unified.country %}<tr><td>Country</td><td>{{ unified.country }}</td></tr>{% endif %}
-          {% if unified.city %}<tr><td>City</td><td>{{ unified.city }}</td></tr>{% endif %}
+          {% if unified.isp and unified.isp != unified.org %}<tr><td>ISP</td><td>{{ unified.isp }}</td></tr>{% endif %}
           {% if unified.usage_type %}<tr><td>Usage Type</td><td>{{ unified.usage_type }}</td></tr>{% endif %}
-          {# Tri-state network flags #}
+          {% if unified.hostnames %}<tr><td>PTR / rDNS</td><td style="font-size:13px">{{ unified.hostnames | join(', ') }}</td></tr>{% endif %}
+          {% if unified.technologies %}<tr><td>Technologies</td><td>{{ unified.technologies | join(', ') }}</td></tr>{% endif %}
+          <tr><td colspan="2" style="padding-top:12px;padding-bottom:4px">
+            <span style="font-family:'Space Mono',monospace;font-size:10px;
+                         letter-spacing:0.14em;text-transform:uppercase;color:var(--text3)">
+              Classification
+            </span>
+          </td></tr>
           {% for flag_label, flag_val in [
             ('Tor Exit Node', unified.is_tor),
             ('VPN',           unified.is_vpn),
             ('Proxy',         unified.is_proxy),
             ('Hosting / DC',  unified.is_hosting),
+            ('Cloud / CDN',   unified.is_cloud),
             ('Scanner',       unified.is_scanner),
             ('Mobile',        unified.is_mobile),
             ('Darkweb',       unified.is_darkweb),
@@ -340,12 +349,10 @@
               {{ 'Yes' if flag_val else 'No' }}
             </td>
           </tr>
+          {% endif %}{% endfor %}
+          {% if unified.is_tor is none and unified.is_vpn is none and unified.is_proxy is none %}
+          <tr><td>Classification</td><td style="color:var(--text3);font-style:italic">Not checked</td></tr>
           {% endif %}
-          {% endfor %}
-          {% if unified.is_tor is none and unified.is_vpn is none %}
-          <tr><td>VPN / Tor / Proxy</td><td style="color:var(--text3);font-style:italic">Not checked</td></tr>
-          {% endif %}
-          {% if unified.technologies %}<tr><td>Technologies</td><td>{{ unified.technologies | join(', ') }}</td></tr>{% endif %}
         </table>
       </div>
 
@@ -652,10 +659,12 @@
       <table class="info-table" style="margin-top:0">
         {% if unified.country %}<tr><td>Country</td><td>{{ unified.country }}</td></tr>{% endif %}
         {% if unified.city    %}<tr><td>City</td><td>{{ unified.city }}</td></tr>{% endif %}
-        {% if unified.org     %}<tr><td>Org</td><td>{{ unified.org }}</td></tr>{% endif %}
-        {% if unified.asn     %}<tr><td>ASN</td><td>{{ unified.asn }}</td></tr>{% endif %}
-        {% if unified.isp     %}<tr><td>ISP</td><td>{{ unified.isp }}</td></tr>{% endif %}
-        {% if unified.network %}<tr><td>Network</td><td>{{ unified.network }}</td></tr>{% endif %}
+        {% if unified.latitude and unified.longitude %}
+        <tr><td>Coordinates</td>
+          <td style="font-family:'Space Mono',monospace;font-size:12px">
+            {{ "%.4f"|format(unified.latitude) }}, {{ "%.4f"|format(unified.longitude) }}
+          </td></tr>
+        {% endif %}
       </table>
     </div>
     {% endif %}
@@ -701,7 +710,7 @@
       {# Graph canvas #}
       <div class="graph-wrap" style="border-radius:0;border:none">
         <div id="graph-container" data-ioc-id="{{ ioc.id }}"
-             style="height:340px;position:relative">
+             style="height:440px;position:relative">
           <div id="graph-loading"
                style="position:absolute;inset:0;display:flex;flex-direction:column;
                       align-items:center;justify-content:center;gap:8px;color:var(--text3)">

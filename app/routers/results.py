@@ -101,6 +101,7 @@ async def _results_page_inner(
         norm.setdefault("is_mobile",  None)
         norm.setdefault("is_scanner", None)
         norm.setdefault("is_darkweb", None)
+        norm.setdefault("is_cloud",   None)
         sources[sr.source] = {
             "status":     sr.status.value,
             "fetched_at": sr.fetched_at.isoformat() if sr.fetched_at else None,
@@ -296,6 +297,9 @@ async def _results_page_inner(
                      ]),
         "is_darkweb":_tri_flag([
                          cip.get("is_darkweb") if ok("criminalip") else None,
+                     ]),
+        "is_cloud":  _tri_flag([
+                         cip.get("is_cloud") if ok("criminalip") else None,
                      ]),
         "latitude":   first(pd.get("latitude")),
         "longitude":  first(pd.get("longitude")),

@@ -221,9 +221,11 @@ class PulsediveConnector(BaseConnector):
         result.tags = result.tags[:10]
 
         # ── Linked indicators for graph ────────────────────────────
-        linked = raw.get("_linked", {}) or {}
+        raw_linked = raw.get("_linked")
+        linked = raw_linked if isinstance(raw_linked, dict) else {}
         linked_iocs = []
-        for item in (linked.get("indicators") or [])[:10]:
+        linked_items = linked.get("indicators") if isinstance(linked, dict) else (linked if isinstance(linked, list) else [])
+        for item in (linked_items or [])[:10]:
             itype = item.get("type", "")
             ival  = item.get("indicator", "")
             if ival and itype in ("ip", "domain", "url", "email"):
@@ -236,7 +238,7 @@ class PulsediveConnector(BaseConnector):
         stamp_added = raw.get("stamp_added")
         stamp_seen  = raw.get("stamp_seen") or raw.get("stamp_probed")
 
-        if stamp_added:
+        if stamp_added and isinstance(stamp_added, str):
             result.reports.append({
                 "date":     stamp_added[:19],
                 "summary":  "First seen by Pulsedive",
@@ -254,7 +256,7 @@ class PulsediveConnector(BaseConnector):
             if feed_names:
                 detail += f": {', '.join(feed_names)}"
             result.reports.append({
-                "date":     stamp_seen[:19] if stamp_seen else None,
+                "date":     stamp_seen[:19] if stamp_seen and isinstance(stamp_seen, str) else None,
                 "summary":  f"Pulsedive — {detail}",
                 "source":   "pulsedive",
                 "category": "threat",

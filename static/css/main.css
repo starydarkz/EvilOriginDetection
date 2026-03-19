@@ -96,8 +96,8 @@ button { cursor: pointer; font-family: inherit; }
   padding: 32px 24px 64px;
 }
 .page-wide {
-  max-width: 1440px; margin: 0 auto;
-  padding: 28px 28px 64px;
+  max-width: 1600px; margin: 0 auto;
+  padding: 24px 24px 64px;
 }
 
 /* ── Surface card ─────────────────────────────────────────────────── */
@@ -206,9 +206,9 @@ button { cursor: pointer; font-family: inherit; }
 /* ── Source rows ──────────────────────────────────────────────────── */
 .source-row {
   display: flex; align-items: center;
-  padding: 9px 12px; border-radius: 10px;
+  padding: 8px 10px; border-radius: 9px;
   background: var(--bg2); border: 1px solid var(--border);
-  margin-bottom: 7px; gap: 10px;
+  margin-bottom: 6px; gap: 9px;
   transition: border-color 0.15s, background 0.15s;
 }
 .source-row:hover { background: var(--bg3); border-color: var(--border2); }
