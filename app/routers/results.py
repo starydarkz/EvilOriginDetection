@@ -5,6 +5,7 @@ GET /results/{ioc_id}/graph → graph data as JSON for Cytoscape.js.
 POST /results/{ioc_id}/rescan → force fresh analysis.
 """
 import json
+import traceback
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
