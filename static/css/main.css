@@ -407,6 +407,10 @@ button { cursor: pointer; font-family: inherit; }
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 .anim-fade-up { animation: fadeUp 0.5s cubic-bezier(.16,1,.3,1) both; }
 .anim-delay-1 { animation-delay: 0.08s; }
 .anim-delay-2 { animation-delay: 0.16s; }
