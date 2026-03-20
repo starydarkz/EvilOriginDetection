@@ -66,6 +66,8 @@ class ShodanConnector(BaseConnector):
         techs_seen = set()
 
         for item in raw.get("data", []):
+            if not isinstance(item, dict):
+                continue
             port      = item.get("port")
             transport = item.get("transport", "tcp").lower()
             product   = item.get("product", "")
@@ -87,7 +89,13 @@ class ShodanConnector(BaseConnector):
         result.technologies = result.technologies[:12]
 
         # ── Vulnerabilities → tags + verdict ─────────────────────
-        vulns = list((raw.get("vulns") or {}).keys())
+        raw_vulns = raw.get("vulns") or {}
+        if isinstance(raw_vulns, dict):
+            vulns = list(raw_vulns.keys())
+        elif isinstance(raw_vulns, list):
+            vulns = [v for v in raw_vulns if isinstance(v, str)]
+        else:
+            vulns = []
         if vulns:
             # Add CVEs as tags (top 5)
             result.tags.extend(vulns[:5])

@@ -159,26 +159,30 @@ async def _results_page_inner(
                 merged_ports.append(p)
                 port_source[p] = src_priority
         # Services (port → service name) + banners
-        for port, svc in (sdata.get("services") or {}).items():
-            try:
-                port_int = int(port)
-            except (ValueError, TypeError):
-                continue
-            if port_int not in merged_services and svc:
-                merged_services[port_int] = {
-                    "service": svc,
-                    "source":  src_priority,
-                }
+        _svc = sdata.get("services") or {}
+        if isinstance(_svc, dict):
+            for port, svc in _svc.items():
+                try:
+                    port_int = int(port)
+                except (ValueError, TypeError):
+                    continue
+                if port_int not in merged_services and svc:
+                    merged_services[port_int] = {
+                        "service": svc,
+                        "source":  src_priority,
+                    }
         # Banners from CriminalIP
-        for port, banner in (sdata.get("banners") or {}).items():
-            try:
-                port_int = int(port)
-            except (ValueError, TypeError):
-                continue
-            if port_int in merged_services:
-                merged_services[port_int]["banner"] = banner
-            else:
-                merged_services[port_int] = {"banner": banner, "source": src_priority}
+        _banners = sdata.get("banners") or {}
+        if isinstance(_banners, dict):
+            for port, banner in _banners.items():
+                try:
+                    port_int = int(port)
+                except (ValueError, TypeError):
+                    continue
+                if port_int in merged_services:
+                    merged_services[port_int]["banner"] = banner
+                else:
+                    merged_services[port_int] = {"banner": banner, "source": src_priority}
         # Technologies
         for t in (sdata.get("technologies") or []):
             tl = t.lower() if t else ""
@@ -376,9 +380,18 @@ async def graph_data(
 ):
     """
     Returns Cytoscape.js-compatible graph data for the IOC and its artifacts.
-    Nodes: the IOC + related artifacts (hostnames, domains, ASN, malware family)
-    Edges: relationships between them.
     """
+    try:
+        return await _graph_data_inner(ioc_id, db)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback as _tb
+        app_logger.error(f"graph_data error ioc={ioc_id}: {_tb.format_exc()}")
+        return JSONResponse({"nodes": [], "edges": [], "error": str(exc)})
+
+
+async def _graph_data_inner(ioc_id: int, db):
     stmt   = select(IOC).where(IOC.id == ioc_id).options(selectinload(IOC.source_results))
     result = await db.execute(stmt)
     ioc    = result.scalar_one_or_none()
@@ -390,6 +403,21 @@ async def graph_data(
     edges = []
 
     # Central node
+    # Build extra info for hash nodes
+    extra_data = {}
+    if ioc.type.value == "hash":
+        meta = json.loads(ioc.metadata_ or "{}")
+        if meta.get("malware_family"): extra_data["malware_family"] = meta["malware_family"]
+        if meta.get("file_type"):      extra_data["file_type"]      = meta["file_type"]
+        # Also check source_results for file_name
+        for _sr in ioc.source_results:
+            if _sr.status.value == "ok":
+                _n = json.loads(_sr.normalized or "{}")
+                if _n.get("file_name"):
+                    extra_data.setdefault("file_name", _n["file_name"])
+                if _n.get("malware_family"):
+                    extra_data.setdefault("malware_family", _n["malware_family"])
+
     nodes.append({
         "data": {
             "id":      f"ioc_{ioc.id}",
@@ -398,6 +426,7 @@ async def graph_data(
             "verdict": ioc.verdict.value if ioc.verdict else "unknown",
             "score":   ioc.score,
             "central": True,
+            **extra_data,
         }
     })
 
@@ -407,22 +436,24 @@ async def graph_data(
     IOC_TYPES = {"ip", "domain", "url", "email", "hash", "network", "username"}
 
     def add_node(node_id, label, ntype, verdict="unknown", score=None,
-                 source=None, reason=None):
+                 source=None, reason=None, **extra):
         """Add node only if it's an IOC type and not already seen."""
         if ntype not in IOC_TYPES:
             return False
         if label in seen_nodes:
             return False
         seen_nodes.add(label)
-        nodes.append({"data": {
+        node_data = {
             "id":      node_id,
             "label":   label,
             "type":    ntype,
             "verdict": verdict,
             "score":   score,
-            "source":  source,   # which intelligence source found this
-            "reason":  reason,   # why this is correlated
-        }})
+            "source":  source,
+            "reason":  reason,
+        }
+        node_data.update({k: v for k, v in extra.items() if v is not None})
+        nodes.append({"data": node_data})
         return True
 
     def add_edge(source_id, target_id, label, edge_type="default",
@@ -493,10 +524,15 @@ async def graph_data(
                                  .get("meaningful_name") or fhash[:20] + "…")
                     if fhash:
                         nid = f"vt_file_{fhash[:12]}"
+                        _item_attrs = item.get("attributes", {}) or {}
+                        _mf = _item_attrs.get("popular_threat_classification", {})
+                        _mf = (_mf.get("suggested_threat_label") or "") if isinstance(_mf, dict) else ""
                         if add_node(nid, fname, "hash",
                                     verdict="malicious",
                                     source="virustotal",
-                                    reason=f"File {elabel} this host (VirusTotal)"):
+                                    reason=f"File {elabel} this host (VirusTotal)",
+                                    file_name=_item_attrs.get("meaningful_name") or None,
+                                    malware_family=_mf or None):
                             add_edge(central_id, nid, elabel, "threat",
                                      source_intel="virustotal")
 
@@ -657,78 +693,109 @@ async def rescan(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+# Phrases that indicate a scan event rather than IOC activity
+_SCAN_NOISE = (
+    # ── Scan-metadata (tool ran a scan, not an indicator event) ─────
+    "shodan indexed",
+    "shodan — ",             # all shodan entries are scan metadata
+    "pulsedive — ",          # pulsedive scan results
+    "pulsedive host scan",
+    "first seen by pulsedive",
+    "criminal ip — ",        # score summary — not an event
+    "criminalip — ",
+    "virustotal — clean",    # 0 detections = no event
+    "urlscan — http",        # scan result
+    "urlscan — scanned",
+    "urlscan — scan",
+    "analysis complete",
+    "first scanned",
+    "resolves to:",
+    "securitytrails — ",     # dns/whois — already in tech info
+    "dns records",
+    "whatsMyName",           # social hits — not IOC activity
+    "found on ",             # WMN platform hits
+    "page captured",         # URLScan description
+    "scan complete",
+    " ports found",          # Shodan port count
+    " open port",            # Shodan port count
+    "risk score",            # CriminalIP score summary
+    # Keep: abuse reports, malware detections, CVE detections, spam reports,
+    #       redirect chains, registration/expiry dates, threat feed appearances
+)
+
+
 def _build_timeline(ioc, sources: dict, history) -> list[dict]:
     """
-    Build activity timeline from result.reports[] populated by each connector.
-    Each connector is responsible for extracting its own dated events.
-    We collect all, sort chronologically, and cap at 15.
+    Build activity timeline — ONLY real IOC activity, not scan metadata.
+    Rules:
+    - Must have a real date (actual activity timestamp)
+    - Skip generic scan/index events
+    - Keep: abuse reports, malware detections, spam submissions, CVEs,
+            domain registration, redirects, threat feed appearances
     """
     events = []
+
+    src_labels = {
+        "virustotal": "VT", "abuseipdb": "ABUSE", "shodan": "SHODAN",
+        "pulsedive": "PD", "criminalip": "CIP", "malwarebazaar": "MB",
+        "urlscan": "USCAN", "securitytrails": "ST",
+        "stopforumspam": "SFS", "whatsmyname": "WMN",
+    }
 
     for src_name, data in sources.items():
         if data.get("status") != "ok":
             continue
 
-        # Use pre-built reports from connector normalize()
         for rep in (data.get("reports") or []):
-            if not rep.get("summary"):
+            summary = rep.get("summary", "")
+            if not summary:
                 continue
+
+            # Skip scan-noise events
+            low = summary.lower()
+            if any(noise in low for noise in _SCAN_NOISE):
+                continue
+
+            # Require a real date for activity events
+            # (undated entries are typically scan summaries, not real activity)
+            date = rep.get("date")
+            category = rep.get("category", "")
+            if not date:
+                # Only allow undated entries for hard threat detections
+                if category not in ("threat", "abuse"):
+                    continue
+                # Skip undated scan summaries even if category is threat
+                low2 = summary.lower()
+                if any(s in low2 for s in ("risk score", "scanned", "indexed", "found on")):
+                    continue
+
             events.append({
-                "date":    rep.get("date"),
-                "source":  src_name,
-                "label":   src_name.upper()[:3],
-                "verdict": data.get("verdict_hint", "unknown"),
-                "summary": rep["summary"],
-                "link":    _source_link(src_name, ioc.value, ioc.type.value),
+                "date":     date,
+                "source":   src_name,
+                "label":    src_labels.get(src_name, src_name[:3].upper()),
+                "verdict":  data.get("verdict_hint", "unknown"),
+                "summary":  summary,
+                "link":     _source_link(src_name, ioc.value, ioc.type.value),
                 "category": rep.get("category", ""),
             })
 
-        # Fallback: if connector has no reports[], create one generic entry
-        if not data.get("reports"):
-            summary = _source_summary(src_name, data)
-            if summary and summary not in ("Scanned", "Not listed"):
-                ts = data.get("last_seen")
-                events.append({
-                    "date":    ts[:19] if ts else None,
-                    "source":  src_name,
-                    "label":   src_name.upper()[:3],
-                    "verdict": data.get("verdict_hint", "unknown"),
-                    "summary": summary,
-                    "link":    _source_link(src_name, ioc.value, ioc.type.value),
-                    "category": "",
-                })
-
-    # Current analysis event (always last)
-    events.append({
-        "date":    ioc.last_scan.isoformat() if ioc.last_scan else None,
-        "source":  "eod",
-        "label":   "EOD",
-        "verdict": ioc.verdict.value if ioc.verdict else "unknown",
-        "summary": f"Analysis complete — Risk score {ioc.score}/100",
-        "link":    None,
-        "current": True,
-        "category": "",
-    })
-
-    # Sort: dated events chronologically, undated before "current"
+    # Sort chronologically (oldest first, undated last)
     def sort_key(e):
         d = e.get("date")
-        if e.get("current"):
-            return "9999-99-99"
-        return str(d)[:19] if d else "8888-01-01"
+        return str(d)[:19] if d else "9999-99-99"
 
     events.sort(key=sort_key)
 
-    # Deduplicate near-identical summaries from same source
+    # Deduplicate near-identical summaries
     seen = set()
     unique = []
     for e in events:
-        key = (e.get("source"), e.get("summary", "")[:40])
+        key = (e["source"], e.get("summary", "")[:50])
         if key not in seen:
             seen.add(key)
             unique.append(e)
 
-    return unique[:15]
+    return unique[:20]
 
 
 def _epoch_to_iso(val) -> str | None:
