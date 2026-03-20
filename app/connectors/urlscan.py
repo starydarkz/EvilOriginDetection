@@ -57,14 +57,20 @@ class URLScanConnector(BaseConnector):
             )
 
             if r.status_code in (400, 403):
-                return {"results": [], "_status": r.status_code}
+                return {"results": [], "_status": r.status_code, "_debug": f"search {r.status_code}"}
             if r.status_code == 429:
                 raise Exception("URLScan rate limit exceeded")
             if r.status_code != 200:
-                return {"results": []}
+                return {"results": [], "_debug": f"search HTTP {r.status_code}"}
 
             data    = r.json()
             results = data.get("results", [])
+            data["_debug_search"] = {
+                "total": data.get("total", 0),
+                "results_count": len(results),
+                "first_uuid": results[0].get("task",{}).get("uuid") if results else None,
+                "first_screenshot": results[0].get("task",{}).get("screenshotURL") if results else None,
+            }
 
             # ── Step 2: Submit new scan if nothing found ───────────
             if not results and self.api_key:
@@ -122,13 +128,32 @@ class URLScanConnector(BaseConnector):
                         )
                         if r2.status_code == 200:
                             data["_detail"] = r2.json()
-                    except Exception:
+                            data["_debug_detail"] = {
+                                "status": r2.status_code,
+                                "has_screenshot": bool(data["_detail"].get("task",{}).get("screenshotURL")),
+                                "screenshot_url": data["_detail"].get("task",{}).get("screenshotURL"),
+                            }
+                        else:
+                            data["_debug_detail"] = {"status": r2.status_code, "error": r2.text[:100]}
+                    except Exception as _de:
+                        data["_debug_detail"] = {"error": str(_de)}
                         pass   # detail is best-effort
 
             return data
 
     def normalize(self, raw: dict, ioc: ParsedIOC,
                   result: NormalizedResult) -> None:
+        # Debug: log what we got from the API
+        _ds = raw.get("_debug_search", {})
+        _dd = raw.get("_debug_detail", {})
+        try:
+            from app.logger import app_logger
+            app_logger.debug(
+                f"[urlscan] {ioc.value} | search: {_ds} | detail: {_dd}"
+            )
+        except Exception:
+            pass
+
         results = raw.get("results", [])
         if not results:
             result.verdict_hint = "unknown"
@@ -144,11 +169,14 @@ class URLScanConnector(BaseConnector):
         uuid = task.get("uuid") or d_task.get("uuid")
 
         # ── Screenshot URL ─────────────────────────────────────────
-        result.screenshot_url = (
-            task.get("screenshotURL")
-            or d_task.get("screenshotURL")
-            or (f"https://urlscan.io/screenshots/{uuid}.png" if uuid else None)
-        )
+        # Always construct from UUID — urlscan.io reliably serves these
+        # even when the API field is missing from search results
+        if uuid:
+            result.screenshot_url = f"https://urlscan.io/screenshots/{uuid}.png"
+        else:
+            result.screenshot_url = (
+                task.get("screenshotURL") or d_task.get("screenshotURL")
+            )
 
         # ── Direct result link (stored in raw for source_link()) ───
         result_url = (
