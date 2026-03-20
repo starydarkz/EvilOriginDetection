@@ -1,14 +1,6 @@
-# Environment — NEVER commit real keys
+# Environment — NEVER commit API keys
 .env
-
-# Database — ephemeral on Render, no need to track
-*.db
-*.db-shm
-*.db-wal
-
-# Logs
-logs/
-*.log
+*.env
 
 # Python
 __pycache__/
@@ -21,14 +13,24 @@ dist/
 build/
 .eggs/
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
+# Database (local dev)
+*.db
+*.sqlite
+*.sqlite3
 
-# Editor
+# Logs
+logs/
+*.log
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Render / deployment
+.render-buildpacks.json

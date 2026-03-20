@@ -124,13 +124,19 @@ class VirusTotalConnector(BaseConnector):
 
         # Hash-specific
         if ioc.type == IOCType.hash:
-            result.file_name    = (attr.get("names") or [None])[0]
+            _names = attr.get("names") or []
+            result.file_name    = (
+                attr.get("meaningful_name") or
+                (_names[0] if _names else None)
+            )
             result.file_type    = attr.get("type_description")
             result.file_size    = attr.get("size")
-            result.malware_family = (
-                attr.get("popular_threat_name") or
-                attr.get("suggested_threat_label")
-            )
+            # malware_family: try popular_threat_classification first
+            _ptc = attr.get("popular_threat_classification") or {}
+            _label = _ptc.get("suggested_threat_label") if isinstance(_ptc, dict) else None
+            _names_list = _ptc.get("popular_threat_name", []) if isinstance(_ptc, dict) else []
+            _top_name = _names_list[0].get("value") if _names_list and isinstance(_names_list[0], dict) else None
+            result.malware_family = _label or _top_name or attr.get("popular_threat_name")
             result.first_submission = attr.get("first_submission_date")
 
         # ── Domain categories ─────────────────────────────────────

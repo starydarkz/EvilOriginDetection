@@ -152,6 +152,6 @@ def _source_ratio(r: NormalizedResult) -> float | None:
 
 
 def _score_to_verdict(score: int) -> Verdict:
-    if score >= 60: return Verdict.malicious
-    if score >= 25: return Verdict.suspicious
+    if score >= 55: return Verdict.malicious
+    if score >= 22: return Verdict.suspicious
     return Verdict.clean
