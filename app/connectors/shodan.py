@@ -33,13 +33,20 @@ class ShodanConnector(BaseConnector):
             if r.status_code == 404:
                 return {"_not_found": True}
             if r.status_code == 403:
-                # 403 on Shodan = IP blocked or plan restriction
-                raise Exception("Shodan: access forbidden (check plan or IP restrictions)")
+                # 403 on Shodan = Render's IP is blocked by free tier
+                # Return empty result so status=ok with unknown verdict (not error)
+                return {"_access_restricted": True}
             r.raise_for_status()
             return r.json()
 
     def normalize(self, raw: dict, ioc: ParsedIOC,
                   result: NormalizedResult) -> None:
+        if raw.get("_access_restricted"):
+            result.verdict_hint = "unknown"
+            result.error = "IP range restricted (Shodan free tier)"
+            # error is set but status will be ok — the analyze router
+            # saves both; the UI shows the error as a note in sources
+            return
         if raw.get("_not_found"):
             result.verdict_hint = "unknown"
             return

@@ -97,7 +97,10 @@ class PulsediveConnector(BaseConnector):
             return
 
         # ── Risk / verdict ─────────────────────────────────────────
-        risk = (raw.get("risk") or raw.get("risk_recommended") or "unknown").lower()
+        _risk_raw = raw.get("risk") or raw.get("risk_recommended") or "unknown"
+        if isinstance(_risk_raw, list):
+            _risk_raw = _risk_raw[0] if _risk_raw else "unknown"
+        risk = str(_risk_raw).lower()
         result.verdict_hint = (
             "malicious"  if risk in ("high", "critical")     else
             "suspicious" if risk in ("medium", "moderate")   else
@@ -106,9 +109,10 @@ class PulsediveConnector(BaseConnector):
         )
 
         # ── Last seen timestamps ───────────────────────────────────
-        result.last_seen = (
-            raw.get("stamp_seen") or raw.get("stamp_probed")
-        )
+        _seen = raw.get("stamp_seen") or raw.get("stamp_probed")
+        if isinstance(_seen, list):
+            _seen = _seen[0] if _seen else None
+        result.last_seen = _seen
 
         # ── Properties block ───────────────────────────────────────
         # Pulsedive can return lists instead of dicts for some fields
@@ -236,7 +240,11 @@ class PulsediveConnector(BaseConnector):
         # ── Reports for timeline ───────────────────────────────────
         result.reports = []
         stamp_added = raw.get("stamp_added")
-        stamp_seen  = raw.get("stamp_seen") or raw.get("stamp_probed")
+        if isinstance(stamp_added, list):
+            stamp_added = stamp_added[0] if stamp_added else None
+        stamp_seen = raw.get("stamp_seen") or raw.get("stamp_probed")
+        if isinstance(stamp_seen, list):
+            stamp_seen = stamp_seen[0] if stamp_seen else None
 
         if stamp_added and isinstance(stamp_added, str):
             result.reports.append({

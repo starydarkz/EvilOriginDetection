@@ -288,11 +288,11 @@ button { cursor: pointer; font-family: inherit; }
 .ioc-input-field {
   width: 100%;
   font-family: 'Space Mono', monospace; font-size: 15px;
-  padding: 14px 18px; border-radius: 10px;
+  padding: 0 18px; border-radius: 10px;
   background: var(--bg2); border: 1px solid var(--border2);
   color: var(--text); outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
-  resize: none; min-height: 54px; line-height: 1.5;
+  line-height: 1;
 }
 .ioc-input-field:focus {
   border-color: var(--accent);

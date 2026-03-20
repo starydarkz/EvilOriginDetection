@@ -51,11 +51,12 @@
     {% endif %}
 
     <div style="position:relative">
-      <textarea name="ioc_input" id="ioc-input" class="ioc-input-field" rows="1"
-        placeholder="IP, domain, hash, URL or email…"
-        style="padding-right:130px;min-height:54px;max-height:120px"
-        oninput="autoResize(this)"
-      ></textarea>
+      <input type="text" name="ioc_input" id="ioc-input"
+        class="ioc-input-field"
+        placeholder="IP · domain · hash · URL · email"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+        style="padding-right:130px;height:54px;font-size:15px"
+      >
       <button type="submit" class="btn btn-primary" id="analyze-btn"
               style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
                      padding:8px 18px;font-size:14px">
@@ -144,17 +145,13 @@
 
 {% block scripts %}
 <script>
-function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
 function insertPrefix(p) {
   const el = document.getElementById('ioc-input');
-  if (el) { el.value = p; el.focus(); el.setSelectionRange(p.length, p.length); }
+  if (el) { el.value = p; el.focus(); }
 }
 function fillExample(v) {
   const el = document.getElementById('ioc-input');
-  if (el) { el.value = v; el.focus(); autoResize(el); }
+  if (el) { el.value = v; el.focus(); }
 }
 function toggleHelp() {
   const b = document.getElementById('help-body');
@@ -163,12 +160,21 @@ function toggleHelp() {
   c.textContent = open ? '▲' : '▼';
 }
 document.addEventListener('keydown', e => {
-  if (e.key === '/' && document.activeElement.tagName !== 'TEXTAREA') {
+  const tag = document.activeElement.tagName;
+  if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
     e.preventDefault(); document.getElementById('ioc-input')?.focus();
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     document.getElementById('analyze-form')?.submit();
   }
+  if (e.key === 'Escape') {
+    const el = document.getElementById('ioc-input');
+    if (el && document.activeElement === el) el.value = '';
+  }
+});
+// Focus input on page load
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('ioc-input')?.focus();
 });
 </script>
 {% endblock %}

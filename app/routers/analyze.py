@@ -132,7 +132,8 @@ async def analyze_single(
     for r in norm_results:
         all_tags.extend(r.tags or [])
         for field in ("country", "city", "asn", "org", "isp", "network",
-                      "malware_family", "file_type", "registrar"):
+                      "malware_family", "file_name", "file_type", "file_size",
+                      "first_submission", "registrar"):
             if getattr(r, field, None) and field not in metadata:
                 metadata[field] = getattr(r, field)
 

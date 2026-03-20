@@ -128,7 +128,10 @@
       {{ ioc.score }}/100
     </span>
     {% endif %}
-    <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard?.writeText('{{ ioc.value }}')">⎘ Copy</button>
+    <a href="/results/{{ ioc.id }}/export" class="btn btn-ghost btn-sm"
+       download="eod_{{ ioc.value[:20] }}.json">↓ Export</a>
+    <button class="btn btn-ghost btn-sm" id="copy-ioc-btn"
+            onclick="copyIOC('{{ ioc.value }}')">⎘ Copy</button>
   </div>
 
   {# ── CACHE BAR ── #}
@@ -600,7 +603,11 @@
         {% if active %}
           {% if src_key == 'virustotal' %}{% set summary = unified.malicious_count|string ~ '/' ~ unified.total_engines|string ~ ' engines' %}
           {% elif src_key == 'abuseipdb' %}{% set summary = 'Abuse score ' ~ (unified.abuse_score or 0)|string ~ '%' %}
-          {% elif src_key == 'shodan' %}{% set summary = (src.get('ports') or [])|length|string ~ ' ports found' %}
+          {% elif src_key == 'shodan' %}
+            {% set _sh_ports = src.get('ports') or [] %}
+            {% if _sh_ports %}{% set summary = _sh_ports|length|string ~ ' open port' ~ ('s' if _sh_ports|length != 1 else '') %}
+            {% elif status == 'ok' %}{% set summary = 'IP range restricted (free plan)' %}
+            {% else %}{% set summary = 'Not scanned' %}{% endif %}
           {% elif src_key == 'pulsedive' %}
             {% if src.get('ports') %}{% set summary = 'Scanned · ' ~ src.get('ports')|length|string ~ ' ports' %}
             {% else %}{% set summary = 'Scanned · ' ~ (hint | capitalize) %}{% endif %}
@@ -755,6 +762,24 @@ function switchTab(panelId, btn) {
 }
 function copyToClipboard(v) {
   navigator.clipboard?.writeText(v);
+}
+function copyIOC(v) {
+  navigator.clipboard?.writeText(v).then(() => {
+    const btn = document.getElementById('copy-ioc-btn');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied';
+      btn.style.color = 'var(--teal)';
+      setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1800);
+    }
+  }).catch(() => {
+    // Fallback for HTTPS-restricted contexts
+    const ta = document.createElement('textarea');
+    ta.value = v; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
 }
 function copyNodeValue() {
   const label = document.getElementById('graph-node-detail')?.querySelector('[data-value]')?.dataset?.value;

@@ -407,16 +407,17 @@ async def _graph_data_inner(ioc_id: int, db):
     extra_data = {}
     if ioc.type.value == "hash":
         meta = json.loads(ioc.metadata_ or "{}")
-        if meta.get("malware_family"): extra_data["malware_family"] = meta["malware_family"]
-        if meta.get("file_type"):      extra_data["file_type"]      = meta["file_type"]
-        # Also check source_results for file_name
+        # Pull from metadata_ first (fastest, set at analysis time)
+        for _f in ("malware_family", "file_name", "file_type", "file_size", "first_submission"):
+            if meta.get(_f):
+                extra_data[_f] = meta[_f]
+        # Also scan source_results in case metadata is from old cached record
         for _sr in ioc.source_results:
             if _sr.status.value == "ok":
                 _n = json.loads(_sr.normalized or "{}")
-                if _n.get("file_name"):
-                    extra_data.setdefault("file_name", _n["file_name"])
-                if _n.get("malware_family"):
-                    extra_data.setdefault("malware_family", _n["malware_family"])
+                for _f in ("file_name", "malware_family", "file_type"):
+                    if _n.get(_f):
+                        extra_data.setdefault(_f, _n[_f])
 
     nodes.append({
         "data": {
@@ -925,6 +926,47 @@ def _extract_geo(sources: dict) -> dict | None:
             geo["lon"] = data["longitude"]
 
     return geo if geo else None
+
+
+@router.get("/results/{ioc_id}/export")
+async def export_json(
+    ioc_id: int,
+    db:     AsyncSession = Depends(get_db),
+):
+    """Export IOC analysis as JSON."""
+    from fastapi.responses import JSONResponse as JR
+    stmt   = select(IOC).where(IOC.id == ioc_id).options(selectinload(IOC.source_results))
+    result = await db.execute(stmt)
+    ioc    = result.scalar_one_or_none()
+    if not ioc:
+        raise HTTPException(status_code=404, detail="IOC not found")
+
+    sources_out = {}
+    for sr in ioc.source_results:
+        if sr.status.value == "ok":
+            try:
+                norm = json.loads(sr.normalized or "{}")
+                sources_out[sr.source] = {
+                    "verdict": norm.get("verdict_hint","unknown"),
+                    "tags":    norm.get("tags", []),
+                    "ports":   norm.get("ports", []),
+                    "country": norm.get("country"),
+                    "org":     norm.get("org"),
+                }
+            except Exception:
+                pass
+
+    export = {
+        "ioc":     ioc.value,
+        "type":    ioc.type.value if ioc.type else "unknown",
+        "score":   ioc.score,
+        "verdict": ioc.verdict.value if ioc.verdict else "unknown",
+        "tags":    json.loads(ioc.tags or "[]"),
+        "sources": sources_out,
+        "scanned_at": ioc.last_scan.isoformat() if ioc.last_scan else None,
+    }
+    return JR(content=export,
+              headers={"Content-Disposition": f'attachment; filename="eod_{ioc.value[:20]}.json"'})
 
 
 @router.get("/graph", response_class=HTMLResponse)

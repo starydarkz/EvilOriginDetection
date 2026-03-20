@@ -209,9 +209,8 @@
     const canAnalyze = ANALYZABLE.has(type) && !d.central;
 
     // Extra metadata for hashes
-    const fileName     = d.file_name     || d.malware_family ? true : false;
-    const malwareFamily = d.malware_family || null;
     const fileNameVal   = d.file_name     || null;
+    const malwareFamily = d.malware_family || null;
 
     const vColors = {
       malicious:'var(--v-malicious)', suspicious:'var(--v-suspicious)',
