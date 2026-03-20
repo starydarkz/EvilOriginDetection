@@ -410,19 +410,38 @@ async def proxy_screenshot(url: str):
     from fastapi.responses import StreamingResponse, Response
     import httpx as _httpx
 
-    # Security: only allow urlscan.io screenshot URLs
-    if not _re.match(r'^https://urlscan\.io/screenshots/[a-fA-F0-9\-]+\.png$', url):
+    # Security: only allow screenshot URLs from trusted sources
+    _urlscan_re   = r'^https://urlscan\.io/screenshots/[a-fA-F0-9\-]+\.png$'
+    _pulsedive_re = r'^https://pulsedive\.com/api/screenshots/\S+$'
+
+    is_urlscan   = bool(_re.match(_urlscan_re,   url))
+    is_pulsedive = bool(_re.match(_pulsedive_re, url))
+
+    if not is_urlscan and not is_pulsedive:
         raise HTTPException(status_code=400, detail="Invalid screenshot URL")
 
     try:
-        async with _httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            r = await client.get(url, headers={
+        # Build appropriate headers per source
+        if is_pulsedive:
+            from app.config import get_settings as _gs
+            _pd_key = _gs().pulsedive_key_1 or _gs().pulsedive_key_2 or ""
+            _req_headers = {
+                "User-Agent": "Mozilla/5.0 (compatible; EvilOriginDetection/1.0)",
+                "Accept": "image/png,image/*",
+                "Referer": "https://pulsedive.com/",
+                **({"X-API-Key": _pd_key} if _pd_key else {}),
+            }
+        else:
+            _req_headers = {
                 "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "image/webp,image/png,image/*,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
                 "Referer": "https://urlscan.io/",
                 "Origin": "https://urlscan.io",
-            })
+            }
+
+        async with _httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            r = await client.get(url, headers=_req_headers)
             if r.status_code == 200:
                 return Response(
                     content=r.content,
@@ -1434,47 +1453,6 @@ async def _results_page_inner(
         "merged_services": merged_services,
         "port_source":     port_source,
     })
-
-
-@router.get("/proxy/screenshot")
-async def proxy_screenshot(url: str):
-    """
-    Proxy URLScan screenshots through our server to avoid CORS/hotlink issues.
-    Only allows urlscan.io screenshot URLs.
-    """
-    import re as _re
-    from fastapi.responses import StreamingResponse, Response
-    import httpx as _httpx
-
-    # Security: only allow urlscan.io screenshot URLs
-    if not _re.match(r'^https://urlscan\.io/screenshots/[a-fA-F0-9\-]+\.png$', url):
-        raise HTTPException(status_code=400, detail="Invalid screenshot URL")
-
-    try:
-        async with _httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            r = await client.get(url, headers={
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "image/webp,image/png,image/*,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": "https://urlscan.io/",
-                "Origin": "https://urlscan.io",
-            })
-            if r.status_code == 200:
-                return Response(
-                    content=r.content,
-                    media_type="image/png",
-                    headers={
-                        "Cache-Control": "public, max-age=86400",
-                        "X-Content-Type-Options": "nosniff",
-                    }
-                )
-            raise HTTPException(status_code=r.status_code, detail="Screenshot unavailable")
-    except _httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Screenshot request timed out")
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Screenshot proxy error: {exc}")
 
 
 @router.get("/results/{ioc_id}/graph", response_class=JSONResponse)

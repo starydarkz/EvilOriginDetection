@@ -123,16 +123,22 @@ class PulsediveConnector(BaseConnector):
         # Geo
         raw_geo = props.get("geo")
         geo = raw_geo if isinstance(raw_geo, dict) else {}
-        result.country   = geo.get("country")
-        result.city      = geo.get("city")
-        result.latitude  = geo.get("latitude")
-        result.longitude = geo.get("longitude")
-        org_raw = geo.get("org", "") or ""
+        def _scalar(v):
+            """Return first element if list, else value as-is."""
+            if isinstance(v, list): return v[0] if v else None
+            return v
+        result.country   = _scalar(geo.get("country"))
+        result.city      = _scalar(geo.get("city"))
+        result.latitude  = _scalar(geo.get("latitude"))
+        result.longitude = _scalar(geo.get("longitude"))
+        _org_val = geo.get("org") or ""
+        org_raw = _org_val[0] if isinstance(_org_val, list) and _org_val else (
+                  str(_org_val) if _org_val and not isinstance(_org_val, (dict, list)) else "")
         if org_raw:
             parts = org_raw.split(" ", 1)
             result.org = (parts[1] if len(parts) > 1 and parts[0].startswith("AS")
                           else org_raw)
-        result.asn = geo.get("asn")
+        result.asn = _scalar(geo.get("asn"))
 
         # Ports — can be [{port:443, protocol:"TCP/SSL"}] or []
         port_entries = props.get("port") or []
@@ -157,8 +163,12 @@ class PulsediveConnector(BaseConnector):
         techs = []
         for h in header_entries:
             if isinstance(h, dict):
-                attr = (h.get("attribute") or "").lower()
-                val  = h.get("value", "") or ""
+                _attr_raw = h.get("attribute") or ""
+                attr = (_attr_raw[0] if isinstance(_attr_raw, list) and _attr_raw
+                        else str(_attr_raw) if _attr_raw else "").lower()
+                _val_raw = h.get("value") or ""
+                val = (_val_raw[0] if isinstance(_val_raw, list) and _val_raw
+                       else str(_val_raw) if _val_raw else "")
                 if attr in ("server", "x-powered-by", "x-generator") and val:
                     techs.append(val[:40])
             elif isinstance(h, str) and h:
@@ -191,6 +201,12 @@ class PulsediveConnector(BaseConnector):
             result.http_status = http["status"]
         if http.get("title"):
             result.http_title = http["title"]
+        # Pulsedive screenshot URL (in http.screenshot or top-level screenshot)
+        _screenshot = (http.get("screenshot") or
+                       props.get("screenshot") or
+                       raw.get("screenshot"))
+        if _screenshot and isinstance(_screenshot, str) and _screenshot.startswith("http"):
+            result.screenshot_url = _screenshot
 
         # HTTP redirects
         redirects = http.get("redirects") or []
@@ -271,7 +287,7 @@ class PulsediveConnector(BaseConnector):
             })
         if result.ports:
             result.reports.append({
-                "date":     stamp_seen[:19] if stamp_seen else None,
+                "date":     stamp_seen[:19] if stamp_seen and isinstance(stamp_seen, str) else None,
                 "summary":  f"Pulsedive host scan — {len(result.ports)} open port(s): "
                             + ", ".join(str(p) for p in result.ports[:6]),
                 "source":   "pulsedive",
