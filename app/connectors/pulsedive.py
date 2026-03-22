@@ -140,19 +140,32 @@ class PulsediveConnector(BaseConnector):
                           else org_raw)
         result.asn = _scalar(geo.get("asn"))
 
-        # Ports — can be [{port:443, protocol:"TCP/SSL"}] or []
+        # Ports — can be [{port:443, protocol:"TCP/SSL", product:"nginx"}] or []
         port_entries = props.get("port") or []
         port_entries = port_entries if isinstance(port_entries, list) else []
-        result.ports = []
+        result.ports    = []
+        result.services = {}
         for p in port_entries:
             if isinstance(p, dict):
                 port_val = p.get("port")
             elif isinstance(p, (int, str)):
                 port_val = p
+                p = {}
             else:
                 continue
             try:
-                result.ports.append(int(str(port_val)))
+                port_int = int(str(port_val))
+                result.ports.append(port_int)
+                # Build service label from protocol/product/version
+                if isinstance(p, dict):
+                    product  = p.get("product")  or p.get("service")  or ""
+                    version  = p.get("version")  or ""
+                    protocol = p.get("protocol") or ""
+                    label_parts = [x for x in [product, version] if x]
+                    if not label_parts and protocol:
+                        label_parts = [protocol]
+                    if label_parts:
+                        result.services[port_int] = " ".join(label_parts).strip()
             except (ValueError, TypeError):
                 pass
         result.ports = sorted(set(result.ports))[:15]

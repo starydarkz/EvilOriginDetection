@@ -149,6 +149,9 @@ class ShodanConnector(BaseConnector):
             # Add CVEs as tags (top 5)
             result.tags.extend(vulns[:5])
             result.verdict_hint = "suspicious"
+        elif result.ports:
+            # Has data but no threats found — informational
+            result.verdict_hint = "clean"
         else:
             result.verdict_hint = "unknown"
 

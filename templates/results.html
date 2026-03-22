@@ -959,6 +959,240 @@
       </div>
       {% endif %}
 
+
+      {# ══ TAB: THREAT INTEL ══ #}
+      {% set _has_threat_data = (
+        sources.get('threatfox',{}).get('status') == 'ok' or
+        sources.get('otx',{}).get('status') == 'ok' or
+        sources.get('feodotracker',{}).get('status') == 'ok' or
+        sources.get('urlhaus',{}).get('status') == 'ok' or
+        sources.get('hashlookup',{}).get('status') == 'ok'
+      ) %}
+      {% if _has_threat_data %}
+      <div class="tab-panel" id="tab-threat">
+
+        {# Feodo Tracker — Botnet C2 #}
+        {% set _fd = sources.get('feodotracker',{}) %}
+        {% if _fd.get('status') == 'ok' and _fd.get('verdict_hint') == 'malicious' %}
+        <div style="margin-bottom:16px;padding:10px 12px;border-radius:8px;
+                    background:rgba(255,85,85,0.08);border:1px solid rgba(255,85,85,0.2)">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                      text-transform:uppercase;color:var(--v-malicious);margin-bottom:4px">
+            🌑 Confirmed Botnet C2 — Feodo Tracker (abuse.ch)
+          </div>
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">
+            {{ _fd.get('malware_family') or 'Unknown Botnet' }}
+          </div>
+          <div style="font-size:12px;color:var(--text3)">
+            Command-and-control server tracked by Feodo Tracker.{% if _fd.get('last_seen') %} Last seen: {{ _fd.get('last_seen','')[:10] }}.{% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        {# ThreatFox #}
+        {% set _tf = sources.get('threatfox',{}) %}
+        {% if _tf.get('status') == 'ok' %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                      text-transform:uppercase;color:var(--text3);margin-bottom:6px">ThreatFox — abuse.ch IOC Database</div>
+          {% if _tf.get('verdict_hint') == 'malicious' %}
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px">
+            {% if _tf.get('malware_family') %}<span style="font-size:14px;font-weight:700;color:var(--v-malicious)">{{ _tf.get('malware_family') }}</span>{% endif %}
+            {% if _tf.get('threat_type') %}<span style="font-size:11px;padding:2px 8px;background:rgba(255,150,0,0.15);border:1px solid rgba(255,150,0,0.3);border-radius:4px;color:#ffa040">{{ _tf.get('threat_type') }}</span>{% endif %}
+            {% if _tf.get('abuse_score') %}<span style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace">confidence: {{ _tf.get('abuse_score') }}%</span>{% endif %}
+          </div>
+          {% if _tf.get('tags') %}
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">
+            {% for t in _tf.get('tags')[:8] %}<span style="font-size:10px;padding:1px 7px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text2)">{{ t }}</span>{% endfor %}
+          </div>
+          {% endif %}
+          {% else %}
+          <div style="font-size:12px;color:var(--text3)">Not found in ThreatFox database.</div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {# URLhaus #}
+        {% set _uh = sources.get('urlhaus',{}) %}
+        {% if _uh.get('status') == 'ok' and _uh.get('verdict_hint') == 'malicious' %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                      text-transform:uppercase;color:var(--text3);margin-bottom:6px">URLhaus — Malware URL Database</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:4px">
+            <span style="color:var(--v-malicious);font-weight:600">{{ _uh.get('malware_family') or 'Malware' }}</span> — serving malicious payloads
+          </div>
+          {% if _uh.get('tags') %}
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            {% for t in _uh.get('tags')[:8] %}<span style="font-size:10px;padding:1px 7px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text2)">{{ t }}</span>{% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {# AlienVault OTX #}
+        {% set _otx = sources.get('otx',{}) %}
+        {% if _otx.get('status') == 'ok' %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                      text-transform:uppercase;color:var(--text3);margin-bottom:8px">AlienVault OTX — Open Threat Exchange</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:8px">
+            <div>
+              <div style="font-size:24px;font-weight:800;font-family:'Outfit',sans-serif;color:var(--v-{{ _otx.get('verdict_hint') or 'unknown' }})">{{ _otx.get('pulse_count') or 0 }}</div>
+              <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase">Threat Pulse{{ 's' if (_otx.get('pulse_count') or 0) != 1 else '' }}</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px;max-width:180px">A pulse is a community-reported collection of IOCs tied to a specific threat, campaign or actor.</div>
+            </div>
+            {% if _otx.get('threat_actor') %}
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">{{ _otx.get('threat_actor') }}</div>
+              <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase">Attributed Adversary</div>
+            </div>
+            {% endif %}
+            {% if _otx.get('malware_family') %}
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--v-malicious)">{{ _otx.get('malware_family') }}</div>
+              <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase">Malware Family</div>
+            </div>
+            {% endif %}
+          </div>
+          {% if unified.attack_techniques %}
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">MITRE ATT&amp;CK Techniques</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            {% for tech in unified.attack_techniques[:10] %}
+            <a href="https://attack.mitre.org/techniques/{{ tech.split('.')[0] }}/" target="_blank" rel="noopener"
+               style="font-family:'Space Mono',monospace;font-size:10px;background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:4px;color:var(--teal);text-decoration:none">{{ tech }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {# CIRCL hashlookup #}
+        {% set _hl = sources.get('hashlookup',{}) %}
+        {% if _hl.get('status') == 'ok' and _hl.get('known_file') %}
+        <div style="padding:10px 12px;border-radius:8px;
+                    background:{% if _hl.get('verdict_hint')=='malicious' %}rgba(255,85,85,0.08){% else %}rgba(68,221,187,0.08){% endif %};
+                    border:1px solid {% if _hl.get('verdict_hint')=='malicious' %}rgba(255,85,85,0.25){% else %}rgba(68,221,187,0.25){% endif %}">
+          <div style="font-size:11px;font-weight:700;margin-bottom:4px;
+                      color:{% if _hl.get('verdict_hint')=='malicious' %}var(--v-malicious){% else %}var(--v-clean){% endif %}">
+            {% if _hl.get('verdict_hint')=='malicious' %}⚠ Known Malicious File{% else %}✓ Known Legitimate File{% endif %}
+            <span style="font-weight:400;color:var(--text3);font-size:10px"> — CIRCL hashlookup (180M+ hashes)</span>
+          </div>
+          {% if _hl.get('known_file_name') %}<div style="font-size:12px;color:var(--text2)">{{ _hl.get('known_file_name') }}</div>{% endif %}
+        </div>
+        {% endif %}
+
+        {% if not ((_fd.get('verdict_hint')=='malicious') or (_tf.get('verdict_hint')=='malicious') or
+                   (_uh.get('verdict_hint')=='malicious') or ((_otx.get('pulse_count') or 0)>0) or _hl.get('known_file')) %}
+        <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0">
+          Sources queried — no threat intelligence matches found for this indicator.
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ══ TAB: CVEs ══ #}
+      {% if unified.cip_vuln_ports %}
+      <div class="tab-panel" id="tab-cve">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:14px">
+          Vulnerabilities detected by Criminal IP on open service ports of this host.
+        </div>
+        {% for port_str, cves in unified.cip_vuln_ports.items() %}
+        {% if cves %}
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                      text-transform:uppercase;color:var(--text3);margin-bottom:8px">Port {{ port_str }}</div>
+          {% for cve in cves[:8] %}
+          <div style="margin-bottom:8px;padding:8px 10px;background:var(--bg3);border-radius:6px;
+                      border-left:3px solid {% if cve.severity=='critical' %}#ff3355{% elif cve.severity=='high' %}var(--v-malicious){% elif cve.severity=='medium' %}var(--v-suspicious){% else %}var(--border2){% endif %}">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+              <a href="https://nvd.nist.gov/vuln/detail/{{ cve.cve_id }}" target="_blank" rel="noopener"
+                 style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--teal);text-decoration:none">{{ cve.cve_id }}</a>
+              {% if cve.cvss is not none %}
+              <span style="font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;
+                           background:{% if (cve.cvss|float)>=9 %}rgba(255,50,80,0.2){% elif (cve.cvss|float)>=7 %}rgba(255,85,0,0.2){% elif (cve.cvss|float)>=4 %}rgba(255,180,0,0.15){% else %}var(--bg2){% endif %};
+                           color:{% if (cve.cvss|float)>=9 %}#ff3355{% elif (cve.cvss|float)>=7 %}var(--v-malicious){% elif (cve.cvss|float)>=4 %}var(--v-suspicious){% else %}var(--text3){% endif %}">
+                CVSS {{ cve.cvss }}</span>
+              {% endif %}
+              {% if cve.severity %}<span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">{{ cve.severity }}</span>{% endif %}
+            </div>
+            {% if cve.summary %}<div style="font-size:11px;color:var(--text3);line-height:1.5">{{ cve.summary }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# ══ TAB: WEB ANALYSIS ══ #}
+      {% if ioc.type.value in ['domain','url'] and sources.get('urlscan',{}).get('status') == 'ok' %}
+      {% set _us = sources.get('urlscan',{}) %}
+      <div class="tab-panel" id="tab-webanalysis">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          {% if unified.http_status %}
+          <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">HTTP {{ unified.http_status }}</span>
+          {% endif %}
+          {% if unified.http_title %}<span style="font-size:13px;font-weight:600;color:var(--text)">"{{ unified.http_title[:60] }}"</span>{% endif %}
+          <div style="margin-left:auto;display:flex;gap:6px">
+            {% if _us.get('result_url') %}<a href="{{ _us.get('result_url') }}" target="_blank" rel="noopener" style="font-size:10px;color:var(--teal);font-family:'Space Mono',monospace;text-decoration:none;border:1px solid rgba(68,221,187,0.3);padding:2px 8px;border-radius:4px">URLScan ↗</a>{% endif %}
+            {% if _us.get('dom_url') %}<a href="{{ _us.get('dom_url') }}" target="_blank" rel="noopener" style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;text-decoration:none;border:1px solid var(--border);padding:2px 8px;border-radius:4px">DOM ↗</a>{% endif %}
+          </div>
+        </div>
+        {% if unified.technologies %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Technologies Detected</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            {% for tech in unified.technologies %}<span style="font-size:11px;padding:2px 9px;background:var(--bg3);border-radius:4px;border:1px solid var(--border2);color:var(--text2)">{{ tech }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% if _us.get('security_headers') %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Security Headers</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            {% for h in _us.get('security_headers',{}).keys() %}<span style="font-size:10px;padding:2px 8px;background:rgba(68,221,187,0.08);border-radius:4px;border:1px solid rgba(68,221,187,0.2);color:var(--teal);font-family:'Space Mono',monospace">{{ h.replace('content-security-policy','CSP').replace('strict-transport-security','HSTS').replace('x-frame-options','X-Frame').replace('x-content-type-options','X-CTO') }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% if _us.get('tls') %}{% set _tls = _us.get('tls',{}) %}
+        <div style="margin-bottom:14px;padding:8px 10px;background:rgba(68,221,187,0.06);border-radius:6px;border:1px solid rgba(68,221,187,0.15)">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase;color:var(--teal);margin-bottom:4px">🔒 TLS Certificate</div>
+          <div style="font-size:12px;color:var(--text2)">
+            {% if _tls.get('issuer') %}{{ _tls.get('issuer') }}{% endif %}
+            {% if _tls.get('valid_to') %} · expires {{ _tls.get('valid_to','')[:10] }}{% endif %}
+            {% if _tls.get('cert_count') and _tls.get('cert_count') > 1 %} · {{ _tls.get('cert_count') }} certs{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% set _ws = _us.get('web_stats',{}) %}
+        {% if _ws %}
+        <div style="margin-bottom:14px;display:flex;gap:20px;flex-wrap:wrap">
+          {% if _ws.get('uniq_ips') %}<div style="text-align:center"><div style="font-size:20px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('uniq_ips') }}</div><div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase">Unique IPs</div></div>{% endif %}
+          {% if _ws.get('total_links') %}<div style="text-align:center"><div style="font-size:20px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('total_links') }}</div><div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase">Links</div></div>{% endif %}
+          {% if _ws.get('total_cookies') %}<div style="text-align:center"><div style="font-size:20px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('total_cookies') }}</div><div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase">Cookies</div></div>{% endif %}
+          {% if _ws.get('server_ip') %}<div><div style="font-size:13px;font-family:'Space Mono',monospace;color:var(--text2)">{{ _ws.get('server_ip') }}</div><div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase">Server IP</div></div>{% endif %}
+          {% if (_ws.get('benign_votes') or 0)+(_ws.get('malicious_votes') or 0) > 0 %}<div style="text-align:center"><div style="font-size:14px;font-weight:700"><span style="color:var(--v-clean)">{{ _ws.get('benign_votes',0) }}✓</span><span style="color:var(--text3);font-size:11px"> / </span><span style="color:var(--v-malicious)">{{ _ws.get('malicious_votes',0) }}✗</span></div><div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase">Community</div></div>{% endif %}
+        </div>
+        {% endif %}
+        {% if unified.redirects %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Redirect Chain</div>
+          <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text3);line-height:2;overflow-wrap:break-word">
+            {% for r in unified.redirects[:5] %}<span style="color:var(--text2)">{{ r[:80] }}{% if r|length > 80 %}…{% endif %}</span>{% if not loop.last %}<span style="color:var(--accent)"> → </span>{% endif %}{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% if _us.get('link_domains') %}
+        <div>
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">External Domains Loaded ({{ _us.get('link_domains')|length }})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            {% for dom in _us.get('link_domains')[:12] %}<span style="font-size:11px;padding:2px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:'Space Mono',monospace">{{ dom }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
     </div>{# end section-card tech info #}
 
   </div>{# end results-main #}
