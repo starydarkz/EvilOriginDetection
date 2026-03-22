@@ -212,12 +212,27 @@ class CriminalIPConnector(BaseConnector):
 
         # ── CVEs ──────────────────────────────────────────────────
         vuln_block = raw.get("vulnerability", {}) or {}
-        cves = []
+        vuln_port_map = {}  # {port: [{"cve_id":..., "cvss":..., "summary":...}]}
         for v in (vuln_block.get("data") or []):
-            if isinstance(v, dict) and v.get("cve_id"):
-                cves.append(v["cve_id"])
-        if cves:
-            result.tags.extend(cves[:5])
+            if not isinstance(v, dict) or not v.get("cve_id"):
+                continue
+            port = v.get("port") or v.get("infer_port")
+            cve  = {
+                "cve_id":  v.get("cve_id"),
+                "cvss":    v.get("cvss_score") or v.get("cvss"),
+                "severity":v.get("severity") or ("critical" if (v.get("cvss_score") or 0) >= 9
+                           else "high" if (v.get("cvss_score") or 0) >= 7
+                           else "medium" if (v.get("cvss_score") or 0) >= 4 else "low"),
+                "summary": (v.get("summary") or v.get("description") or "")[:120],
+            }
+            key = int(port) if port and str(port).isdigit() else 0
+            vuln_port_map.setdefault(key, []).append(cve)
+        if vuln_port_map:
+            # Store in raw for results.py to extract
+            raw["_vuln_ports"] = {str(k): v for k, v in vuln_port_map.items()}
+            # Also add top CVE IDs to tags
+            all_cves = [c["cve_id"] for cves in vuln_port_map.values() for c in cves]
+            result.tags.extend(all_cves[:5])
 
         # ── Connected domains → graph ──────────────────────────────
         domain_block = raw.get("domain", {}) or {}

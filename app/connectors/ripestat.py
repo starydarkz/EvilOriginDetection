@@ -158,14 +158,8 @@ class RIPEstatConnector(BaseConnector):
         # ── Verdict — RIPEstat is informational only ─────────────
         result.verdict_hint = "unknown"
 
-        # ── Tags ─────────────────────────────────────────────────
+        # ── Tags — only flag high-risk ASN, routing info goes to BGP tab ─
         tags = []
-        if result.rir:
-            tags.append(result.rir.upper())
-        if result.bgp_prefix:
-            tags.append(f"prefix:{result.bgp_prefix}")
-        if result.abuse_contact:
-            tags.append("abuse-contact-known")
         if result.asn_rank is not None and result.asn_rank > 0.7:
             tags.append("high-risk-asn")
         result.tags = tags

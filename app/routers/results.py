@@ -824,6 +824,28 @@ async def _graph_data_inner(ioc_id: int, db):
                         add_edge(central_id, nid, "loads", "threat",
                                  source_intel="urlscan")
 
+
+            # ── ThreatFox / OTX / URLhaus — related IOCs ─────────
+            if src in ("threatfox", "otx", "urlhaus"):
+                for rel in (raw.get("related_iocs") or [])[:6]:
+                    if not isinstance(rel, dict):
+                        continue
+                    val   = (rel.get("value") or "").strip()
+                    rtype = rel.get("type", "ip")
+                    if not val or val == ioc.value:
+                        continue
+                    if rtype not in ("ip", "domain", "hash", "url"):
+                        continue
+                    nid = f"rel_{src}_{val[:32]}"
+                    mw  = rel.get("malware") or rel.get("malware_family") or ""
+                    reason = f"Related IOC ({src})" + (f" · {mw}" if mw else "")
+                    if add_node(nid, val, rtype,
+                                verdict="malicious",
+                                source=src,
+                                reason=reason):
+                        add_edge(central_id, nid,
+                                 rel.get("relationship", "related"),
+                                 "threat", source_intel=src)
     return {"nodes": nodes, "edges": edges}
 
 
@@ -1480,6 +1502,7 @@ async def _results_page_inner(
         "latitude":   first(pd.get("latitude")),
         "longitude":  first(pd.get("longitude")),
 
+
         # ── Ports / services (already merged above) ────────────────
         "ports":      merged_ports,
         "services":   merged_services,
@@ -1865,6 +1888,28 @@ async def _graph_data_inner(ioc_id: int, db):
                         add_edge(central_id, nid, "loads", "threat",
                                  source_intel="urlscan")
 
+
+            # ── ThreatFox / OTX / URLhaus — related IOCs ─────────
+            if src in ("threatfox", "otx", "urlhaus"):
+                for rel in (raw.get("related_iocs") or [])[:6]:
+                    if not isinstance(rel, dict):
+                        continue
+                    val   = (rel.get("value") or "").strip()
+                    rtype = rel.get("type", "ip")
+                    if not val or val == ioc.value:
+                        continue
+                    if rtype not in ("ip", "domain", "hash", "url"):
+                        continue
+                    nid = f"rel_{src}_{val[:32]}"
+                    mw  = rel.get("malware") or rel.get("malware_family") or ""
+                    reason = f"Related IOC ({src})" + (f" · {mw}" if mw else "")
+                    if add_node(nid, val, rtype,
+                                verdict="malicious",
+                                source=src,
+                                reason=reason):
+                        add_edge(central_id, nid,
+                                 rel.get("relationship", "related"),
+                                 "threat", source_intel=src)
     return {"nodes": nodes, "edges": edges}
 
 
@@ -2174,3 +2219,5 @@ async def export_json(
 async def graph_page(request: Request):
     """Standalone correlation graph explorer."""
     return templates.TemplateResponse("graph.html", {"request": request})
+
+
