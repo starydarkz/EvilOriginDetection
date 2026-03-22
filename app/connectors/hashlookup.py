@@ -172,10 +172,22 @@ class PassiveDNSConnector(BaseConnector):
             rrtype  = rec.get("rrtype")  or rec.get("type")  or ""
             query   = rec.get("query")   or rec.get("qname") or ""
             answer  = rec.get("answer")  or rec.get("rdata") or ""
-            first   = (rec.get("firstSeenTimestamp") or
-                       rec.get("first_seen") or "")[:10]
-            last    = (rec.get("lastSeenTimestamp")  or
-                       rec.get("last_seen")  or "")[:10]
+
+            # Timestamps can be unix int OR ISO string — handle both
+            def _ts(val):
+                if val is None:
+                    return ""
+                if isinstance(val, int):
+                    # Unix timestamp → date string
+                    try:
+                        from datetime import datetime, timezone
+                        return datetime.fromtimestamp(val, tz=timezone.utc).strftime("%Y-%m-%d")
+                    except Exception:
+                        return str(val)[:10]
+                return str(val)[:10]
+
+            first   = _ts(rec.get("firstSeenTimestamp") or rec.get("first_seen"))
+            last    = _ts(rec.get("lastSeenTimestamp")  or rec.get("last_seen"))
             count   = rec.get("count") or 1
 
             key = f"{rrtype}:{query}:{answer}"

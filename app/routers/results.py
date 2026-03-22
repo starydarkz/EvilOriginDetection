@@ -4,6 +4,7 @@ GET /results/{ioc_id} → render full analysis view.
 GET /results/{ioc_id}/graph → graph data as JSON for Cytoscape.js.
 POST /results/{ioc_id}/rescan → force fresh analysis.
 """
+import re
 import json
 import traceback
 from app.logger import app_logger, exc_logger, log_query
