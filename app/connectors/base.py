@@ -113,6 +113,22 @@ class NormalizedResult:
         "email_reports",        # int — spam report count
         "reports",              # list[dict] — individual reports with dates
 
+        # ── threat_intel (new sources) ────────────────────────────
+        "threat_type",          # str  — e.g. "botnet_cc", "payload_delivery"
+        "threat_actor",         # str  — adversary/actor name
+        "attack_techniques",    # list[str] — MITRE ATT&CK IDs
+        "related_iocs",         # list[dict] — {value, type, relationship}
+        "breach_count",         # int  — number of data breaches
+        "breach_data",          # list[dict] — breach details
+        "passive_dns",          # list[dict] — {rrtype, query, answer, first_seen, last_seen}
+        "asn_rank",             # float — BGP ranking (0=best, 1=worst)
+        "asn_rank_position",    # int   — position among all ASNs
+        "abuse_contact",        # str   — abuse@email from RIR
+        "bgp_prefix",           # str   — announced BGP prefix
+        "rir",                  # str   — ARIN/RIPE/APNIC/LACNIC/AFRINIC
+        "known_file",           # bool  — is hash a known good/bad file
+        "known_file_name",      # str   — canonical filename from hashlookup
+
         # ── internal ──────────────────────────────────────────────
         "raw",                  # full original API response dict
         "error",                # error message if status != ok

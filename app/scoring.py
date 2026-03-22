@@ -29,6 +29,14 @@ WEIGHTS: dict[str, int] = {
     "shodan":         3,
     "securitytrails": 2,
     "whatsmyname":    1,
+    # ── New sources ───────────────────────────────────────────────
+    "threatfox":     15,   # C2/malware IOC database — high signal
+    "urlhaus":       10,   # active malware delivery URLs — high signal
+    "feodotracker":  12,   # confirmed botnet C2 — very high signal
+    "otx":            8,   # community threat pulses
+    "ripestat":       0,   # informational only (routing/ASN)
+    "hashlookup":     8,   # known file verdict
+    "passivedns":     0,   # informational only (DNS history)
 }
 
 
@@ -145,8 +153,52 @@ def _source_ratio(r: NormalizedResult) -> float | None:
     if r.source == "whatsmyname":
         hits = r.username_hits or []
         if hits:
-            return 0.1   # found on platforms → very mild signal
+            return 0.1
         return 0.0
+
+    # ── ThreatFox — C2/malware IOC database ──────────────────────
+    if r.source == "threatfox":
+        if r.abuse_score is not None:
+            return r.abuse_score / 100
+        if r.verdict_hint == "malicious":
+            return 0.9
+        return None
+
+    # ── URLhaus — active malware delivery ────────────────────────
+    if r.source == "urlhaus":
+        if r.verdict_hint == "malicious":
+            tags = r.tags or []
+            has_active = any("active" in t for t in tags)
+            return 1.0 if has_active else 0.85
+        return None
+
+    # ── Feodo Tracker — confirmed botnet C2 ──────────────────────
+    if r.source == "feodotracker":
+        if r.verdict_hint == "malicious":
+            return 1.0
+        return None
+
+    # ── OTX — community threat pulses ────────────────────────────
+    if r.source == "otx":
+        if r.verdict_hint == "malicious":
+            return 1.0
+        if r.verdict_hint == "suspicious":
+            return 0.5
+        if r.pulse_count and r.pulse_count > 0:
+            return min(r.pulse_count / 10, 0.6)
+        return None
+
+    # ── hashlookup — known file verdict ──────────────────────────
+    if r.source == "hashlookup":
+        if r.verdict_hint == "malicious":
+            return 1.0
+        if r.verdict_hint == "clean":
+            return 0.0
+        return None
+
+    # ── ripestat / passivedns — informational only ────────────────
+    if r.source in ("ripestat", "passivedns"):
+        return None
 
     return None
 

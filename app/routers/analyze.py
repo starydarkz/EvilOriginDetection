@@ -36,6 +36,12 @@ from app.connectors.urlscan      import URLScanConnector
 from app.connectors.securitytrails import SecurityTrailsConnector
 from app.connectors.stopforumspam  import StopForumSpamConnector
 from app.connectors.whatsmyname    import WhatsMyNameConnector
+from app.connectors.threatfox      import ThreatFoxConnector
+from app.connectors.urlhaus        import URLhausConnector
+from app.connectors.feodotracker   import FeodoTrackerConnector
+from app.connectors.otx            import OTXConnector
+from app.connectors.ripestat       import RIPEstatConnector
+from app.connectors.hashlookup     import HashlookupConnector, PassiveDNSConnector
 
 router    = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -58,6 +64,14 @@ def build_connectors() -> list:
         SecurityTrailsConnector(pick_key(s.securitytrails_key_1, s.securitytrails_key_2)),
         StopForumSpamConnector(pick_key(s.stopforumspam_key_1,   s.stopforumspam_key_2)),
         WhatsMyNameConnector(  pick_key(s.whatsmyname_key_1,     s.whatsmyname_key_2)),
+        # ── New no-key sources ──────────────────────────────────────────
+        ThreatFoxConnector(    api_key=None),
+        URLhausConnector(      api_key=None),
+        FeodoTrackerConnector( api_key=None),
+        OTXConnector(          pick_key(s.otx_key_1, s.otx_key_2)),
+        RIPEstatConnector(     api_key=None),
+        HashlookupConnector(   api_key=None),
+        PassiveDNSConnector(   api_key=None),
     ]
 
 

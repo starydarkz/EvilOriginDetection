@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     whatsmyname_key_1: Optional[str] = None
     whatsmyname_key_2: Optional[str] = None
 
+    # ── NEW SOURCES ──────────────────────────────────────────────────
+    # ThreatFox, URLhaus, Feodo Tracker, CIRCL hashlookup, RIPEstat, Passive DNS
+    # → all free, no key required
+
+    # AlienVault OTX — optional key for higher rate limits
+    # Free registration at: https://otx.alienvault.com/
+    otx_key_1: Optional[str] = None
+    otx_key_2: Optional[str] = None
+
 
 @lru_cache
 def get_settings() -> Settings:

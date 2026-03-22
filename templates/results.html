@@ -261,6 +261,138 @@
       {% endif %}
     </div>
 
+    {# ── SECTION 2b: THREAT INTELLIGENCE ── #}
+    {% set has_tf  = sources.get('threatfox',{}).get('status') == 'ok' and sources.get('threatfox',{}).get('verdict_hint') == 'malicious' %}
+    {% set has_uh  = sources.get('urlhaus',{}).get('status') == 'ok' and sources.get('urlhaus',{}).get('verdict_hint') == 'malicious' %}
+    {% set has_fd  = sources.get('feodotracker',{}).get('status') == 'ok' and sources.get('feodotracker',{}).get('verdict_hint') == 'malicious' %}
+    {% set has_otx = sources.get('otx',{}).get('status') == 'ok' and (sources.get('otx',{}).get('pulse_count') or 0) > 0 %}
+    {% set has_hl  = sources.get('hashlookup',{}).get('status') == 'ok' and sources.get('hashlookup',{}).get('known_file') %}
+    {% if has_tf or has_uh or has_fd or has_otx or has_hl %}
+    <div class="section-card anim-fade-up anim-delay-2" style="border-left:2px solid var(--v-malicious)">
+      <div class="section-card-title" style="color:var(--v-malicious)">⚠ Threat Intelligence</div>
+
+      {% if has_fd %}
+      {% set fd = sources.get('feodotracker',{}) %}
+      <div style="margin-bottom:14px;padding:10px 12px;border-radius:8px;
+                  background:rgba(255,85,85,0.08);border:1px solid rgba(255,85,85,0.2)">
+        <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                    text-transform:uppercase;color:var(--v-malicious);margin-bottom:4px">🌑 Botnet C2 Server</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px">
+          {{ fd.get('malware_family') or 'Unknown Botnet' }}</div>
+        <div style="font-size:12px;color:var(--text3)">
+          Confirmed command-and-control server tracked by Feodo Tracker (abuse.ch)
+          {% if fd.get('last_seen') %} · Last seen: {{ fd.get('last_seen')[:10] }}{% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if has_tf %}
+      {% set tf = sources.get('threatfox',{}) %}
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">ThreatFox</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          {% if tf.get('malware_family') %}
+          <span style="font-size:13px;font-weight:700;color:var(--v-malicious)">
+            {{ tf.get('malware_family') }}</span>
+          {% endif %}
+          {% if tf.get('threat_type') %}
+          <span class="badge badge-suspicious" style="font-size:10px">{{ tf.get('threat_type') }}</span>
+          {% endif %}
+          {% if tf.get('abuse_score') %}
+          <span style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace">
+            confidence {{ tf.get('abuse_score') }}%</span>
+          {% endif %}
+        </div>
+        {% if tf.get('related_iocs') %}
+        <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+          Related IOCs:
+          {% for r in tf.get('related_iocs')[:4] %}
+          <span style="font-family:'Space Mono',monospace;background:var(--bg3);
+                       padding:1px 5px;border-radius:3px;margin-left:4px">
+            {{ r.value[:25] }}{% if r.value|length > 25 %}…{% endif %}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if has_uh %}
+      {% set uh = sources.get('urlhaus',{}) %}
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">URLhaus</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px">
+          {{ uh.get('malware_family') or 'Malware' }} — distributing malicious payloads
+        </div>
+        {% set _uh_tags = uh.get('tags') or [] %}
+        {% if _uh_tags %}
+        <div class="tags-wrap">
+          {% for t in _uh_tags[:6] %}
+          <span class="tag-chip">{{ t }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if has_otx %}
+      {% set otx = sources.get('otx',{}) %}
+      <div style="margin-bottom:6px">
+        <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">AlienVault OTX</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+          <div>
+            <div style="font-size:22px;font-weight:800;font-family:'Outfit',sans-serif;
+                        color:var(--v-{{ otx.get('verdict_hint') or 'unknown' }})">
+              {{ otx.get('pulse_count') or 0 }}</div>
+            <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;
+                        letter-spacing:0.1em;text-transform:uppercase">Threat Pulses</div>
+          </div>
+          {% if otx.get('threat_actor') %}
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">{{ otx.get('threat_actor') }}</div>
+            <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;
+                        letter-spacing:0.1em;text-transform:uppercase">Adversary</div>
+          </div>
+          {% endif %}
+        </div>
+        {% if unified.attack_techniques %}
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;
+                    font-family:'Space Mono',monospace;letter-spacing:0.08em">ATT&CK:</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          {% for tech in unified.attack_techniques[:8] %}
+          <a href="https://attack.mitre.org/techniques/{{ tech.split('.')[0] }}/"
+             target="_blank" rel="noopener"
+             style="font-family:'Space Mono',monospace;font-size:10px;
+                    background:var(--bg3);border:1px solid var(--border);
+                    padding:2px 7px;border-radius:4px;color:var(--teal);
+                    text-decoration:none">{{ tech }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if has_hl %}
+      {% set hl = sources.get('hashlookup',{}) %}
+      <div style="padding:8px 12px;border-radius:7px;
+                  background:{% if hl.get('verdict_hint')=='malicious' %}rgba(255,85,85,0.08){% else %}rgba(68,221,187,0.08){% endif %};
+                  border:1px solid {% if hl.get('verdict_hint')=='malicious' %}rgba(255,85,85,0.2){% else %}rgba(68,221,187,0.2){% endif %}">
+        <div style="font-size:12px;font-weight:700;
+                    color:{% if hl.get('verdict_hint')=='malicious' %}var(--v-malicious){% else %}var(--v-clean){% endif %}">
+          {% if hl.get('verdict_hint')=='malicious' %}⚠ Known malicious file{% else %}✓ Known file (CIRCL hashlookup){% endif %}
+        </div>
+        {% if hl.get('known_file_name') %}
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">{{ hl.get('known_file_name') }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+    {% endif %}
+
     {# ── SECTION 3: TIMELINE ── #}
     <div class="section-card anim-fade-up anim-delay-3">
       <div class="section-card-title">③ Activity Timeline</div>
@@ -297,6 +429,14 @@
         {% if ioc.type.value == 'ip' %}
         <button class="tab-btn active" onclick="switchTab('tab-network',this)">Network</button>
         <button class="tab-btn" onclick="switchTab('tab-ports',this)">Ports</button>
+        {% endif %}
+        {% if ioc.type.value == 'ip' %}
+        {% if unified.passive_dns or unified.pdns_hostnames %}
+        <button class="tab-btn" onclick="switchTab('tab-pdns',this)">Passive DNS</button>
+        {% endif %}
+        {% if unified.bgp_prefix or unified.abuse_contact or unified.rir %}
+        <button class="tab-btn" onclick="switchTab('tab-bgp',this)">BGP / RIR</button>
+        {% endif %}
         {% endif %}
         {% if ioc.type.value in ['ip','domain','url','email'] %}
         <button class="tab-btn {% if ioc.type.value != 'ip' %}active{% endif %}"
@@ -404,6 +544,105 @@
         {% endif %}
       </div>
       {% endif %}
+
+
+      {# TAB: PASSIVE DNS — mnemonic passive DNS history #}
+      {% if ioc.type.value == 'ip' and (unified.passive_dns or unified.pdns_hostnames) %}
+      <div class="tab-panel" id="tab-pdns">
+        {% if unified.pdns_hostnames %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:0.1em;
+                      text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+            Co-hosted Domains ({{ unified.pdns_hostnames|length }})
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            {% for dom in unified.pdns_hostnames[:20] %}
+            <a href="/analyze" onclick="event.preventDefault();document.querySelector('#ioc-input').value='{{ dom }}';document.querySelector('#analyze-form').submit()"
+               style="font-family:'Space Mono',monospace;font-size:11px;
+                      background:var(--bg3);border:1px solid var(--border);
+                      padding:3px 8px;border-radius:5px;color:var(--teal);
+                      text-decoration:none;cursor:pointer">{{ dom }}</a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% if unified.passive_dns %}
+        <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:0.1em;
+                    text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+          DNS Records ({{ unified.passive_dns|length }})
+        </div>
+        <table class="info-table" style="font-size:11px">
+          <thead>
+            <tr style="opacity:0.5">
+              <th style="text-align:left;padding:4px 6px;font-weight:400">Type</th>
+              <th style="text-align:left;padding:4px 6px;font-weight:400">Query</th>
+              <th style="text-align:left;padding:4px 6px;font-weight:400">Answer</th>
+              <th style="text-align:left;padding:4px 6px;font-weight:400">First seen</th>
+              <th style="text-align:left;padding:4px 6px;font-weight:400">Last seen</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for rec in unified.passive_dns[:15] %}
+          <tr>
+            <td style="padding:3px 6px;font-family:'Space Mono',monospace;color:var(--teal)">
+              {{ rec.rrtype }}</td>
+            <td style="padding:3px 6px;word-break:break-all;max-width:140px">{{ rec.query[:40] }}</td>
+            <td style="padding:3px 6px;word-break:break-all;max-width:140px">{{ rec.answer[:40] }}</td>
+            <td style="padding:3px 6px;color:var(--text3)">{{ rec.first_seen or '—' }}</td>
+            <td style="padding:3px 6px;color:var(--text3)">{{ rec.last_seen or '—' }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# TAB: BGP / RIR — RIPEstat authoritative routing data #}
+      {% if ioc.type.value == 'ip' and (unified.bgp_prefix or unified.abuse_contact or unified.rir) %}
+      <div class="tab-panel" id="tab-bgp">
+        <table class="info-table">
+          {% if unified.bgp_prefix %}
+          <tr><td>BGP Prefix</td>
+              <td style="font-family:'Space Mono',monospace">{{ unified.bgp_prefix }}</td></tr>
+          {% endif %}
+          {% if unified.rir %}
+          <tr><td>RIR</td><td>{{ unified.rir }}</td></tr>
+          {% endif %}
+          {% if unified.abuse_contact %}
+          <tr><td>Abuse Contact</td>
+              <td><a href="mailto:{{ unified.abuse_contact }}"
+                     style="color:var(--teal)">{{ unified.abuse_contact }}</a></td></tr>
+          {% endif %}
+          {% if unified.asn_rank is not none %}
+          <tr><td>ASN Risk Rank</td>
+              <td>
+                <span style="font-family:'Space Mono',monospace">
+                  {{ (unified.asn_rank * 100) | round(1) }}%
+                  {% if unified.asn_rank_position %}
+                  (position {{ unified.asn_rank_position | int }})
+                  {% endif %}
+                </span>
+                {% if unified.asn_rank > 0.7 %}
+                <span class="badge badge-malicious" style="margin-left:8px;font-size:9px">HIGH RISK ASN</span>
+                {% elif unified.asn_rank > 0.4 %}
+                <span class="badge badge-suspicious" style="margin-left:8px;font-size:9px">MEDIUM RISK</span>
+                {% endif %}
+              </td>
+          </tr>
+          {% endif %}
+        </table>
+        <div style="margin-top:12px;font-size:11px;color:var(--text3)">
+          Source: <a href="https://stat.ripe.net/app/launchpad/{{ ioc.value }}"
+                     target="_blank" rel="noopener" style="color:var(--teal)">
+            RIPEstat ↗</a>
+          &nbsp;·&nbsp;
+          <a href="https://bgpranking.circl.lu/" target="_blank" rel="noopener"
+             style="color:var(--text3)">BGP Ranking ↗</a>
+        </div>
+      </div>
+      {% endif %}
+
 
       {# TAB: WHOIS #}
       {% if ioc.type.value in ['ip','domain','url','email'] %}
@@ -599,6 +838,13 @@
         ('securitytrails','SecurityTrails'),
         ('stopforumspam', 'StopForumSpam'),
         ('whatsmyname',   'WhatsMyName'),
+        ('threatfox',     'ThreatFox'),
+        ('urlhaus',       'URLhaus'),
+        ('feodotracker',  'Feodo Tracker'),
+        ('otx',           'AlienVault OTX'),
+        ('ripestat',      'RIPEstat'),
+        ('hashlookup',    'CIRCL hashlookup'),
+        ('passivedns',    'Passive DNS'),
       ] %}
       {% for src_key, src_label in source_meta %}
         {% set src    = sources.get(src_key, {}) %}
@@ -629,6 +875,38 @@
             {% if src.get('http_title') %}{% set summary = '"' ~ src.get('http_title')[:28] ~ '"' %}
             {% elif src.get('screenshot_url') %}{% set summary = 'Page captured' %}
             {% else %}{% set summary = 'Scan complete' %}{% endif %}
+          {% elif src_key == 'threatfox' %}
+            {% if src.get('malware_family') %}{% set summary = src.get('malware_family')[:30] ~ ' · ' ~ (src.get('threat_type') or 'Threat') %}
+            {% elif src.get('verdict_hint') == 'malicious' %}{% set summary = 'IOC confirmed malicious' %}
+            {% else %}{% set summary = 'Not in database' %}{% endif %}
+          {% elif src_key == 'urlhaus' %}
+            {% if src.get('verdict_hint') == 'malicious' %}
+              {% set _uh_active = namespace(found=false) %}
+              {% for _t in (src.get('tags') or []) %}{% if 'active' in _t %}{% set _uh_active.found = true %}{% endif %}{% endfor %}
+              {% if _uh_active.found %}{% set summary = 'Active malware URLs detected' %}
+              {% else %}{% set summary = 'Malware URLs found' %}{% endif %}
+            {% else %}{% set summary = 'Not in database' %}{% endif %}
+          {% elif src_key == 'feodotracker' %}
+            {% if src.get('verdict_hint') == 'malicious' %}{% set summary = (src.get('malware_family') or 'Botnet') ~ ' C2 server' %}
+            {% else %}{% set summary = 'Not in blocklist' %}{% endif %}
+          {% elif src_key == 'otx' %}
+            {% set _pc = src.get('pulse_count') or 0 %}
+            {% if _pc > 0 %}{% set summary = _pc|string ~ ' threat pulse' ~ ('s' if _pc != 1 else '') %}
+            {% else %}{% set summary = 'No pulses' %}{% endif %}
+          {% elif src_key == 'ripestat' %}
+            {% if src.get('bgp_prefix') %}{% set summary = 'BGP: ' ~ src.get('bgp_prefix') %}
+            {% elif src.get('rir') %}{% set summary = src.get('rir') ~ ' network info' %}
+            {% else %}{% set summary = 'Routing data retrieved' %}{% endif %}
+          {% elif src_key == 'hashlookup' %}
+            {% if src.get('known_file') %}
+              {% if src.get('verdict_hint') == 'malicious' %}{% set summary = '⚠ Known malicious file' %}
+              {% elif src.get('known_file_name') %}{% set summary = '✓ ' ~ src.get('known_file_name')[:30] %}
+              {% else %}{% set summary = '✓ Known file' %}{% endif %}
+            {% else %}{% set summary = 'Hash not in database' %}{% endif %}
+          {% elif src_key == 'passivedns' %}
+            {% set _pd = src.get('passive_dns') or [] %}
+            {% if _pd %}{% set summary = _pd|length|string ~ ' DNS record' ~ ('s' if _pd|length != 1 else '') %}
+            {% else %}{% set summary = 'No records found' %}{% endif %}
           {% elif src_key == 'securitytrails' %}
             {% if src.get('dns_records') %}{% set summary = 'DNS records found' %}
             {% elif src.get('registrar') %}{% set summary = src.get('registrar') %}
@@ -639,7 +917,11 @@
             {% else %}{% set summary = 'No accounts found' %}{% endif %}
           {% else %}{% set summary = hint | capitalize %}{% endif %}
         {% elif status == 'no_key' %}{% set summary = 'API key not set up' %}
-        {% elif status == 'skipped' %}{% set summary = 'Not applicable for ' ~ ioc.type.value ~ 's' %}
+        {% elif status == 'skipped' %}
+            {% if src_key in ['feodotracker','ripestat'] and ioc.type.value != 'ip' %}{% set summary = 'IP addresses only' %}
+            {% elif src_key == 'hashlookup' and ioc.type.value != 'hash' %}{% set summary = 'File hashes only' %}
+            {% elif src_key == 'passivedns' and ioc.type.value not in ['ip','domain'] %}{% set summary = 'IP / domain only' %}
+            {% else %}{% set summary = 'Not applicable for ' ~ ioc.type.value ~ 's' %}{% endif %}
         {% elif status == 'error' %}{% set summary = src.get('error','Connection failed') | truncate(32) %}
         {% elif status == 'timeout' %}{% set summary = 'Request timed out' %}
         {% else %}{% set summary = '—' %}{% endif %}

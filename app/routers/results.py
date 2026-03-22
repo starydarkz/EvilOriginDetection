@@ -265,6 +265,14 @@ async def _results_page_inner(
     mb  = sources.get("malwarebazaar",   {})
     wmn = sources.get("whatsmyname",     {})
     sfs = sources.get("stopforumspam",   {})
+    # ── New sources ───────────────────────────────────────────────────
+    tf  = sources.get("threatfox",       {})
+    uh  = sources.get("urlhaus",         {})
+    fd  = sources.get("feodotracker",    {})
+    otx = sources.get("otx",            {})
+    ripe= sources.get("ripestat",        {})
+    hl  = sources.get("hashlookup",      {})
+    dns = sources.get("passivedns",      {})
 
     def _to_int(val) -> int | None:
         """Normalize http_status to int — URLScan returns string."""
@@ -378,6 +386,32 @@ async def _results_page_inner(
         "mb_ok":             ok("malwarebazaar"),
         "connected_domains": cip.get("connected_domains") or [],
         "cip_vuln_ports":    cip.get("vuln_ports") or {},
+
+        # ── New sources — threat intel ────────────────────────────
+        "threat_type":       first(tf.get("threat_type"),  uh.get("threat_type"),
+                                   fd.get("threat_type"),  otx.get("threat_type")),
+        "threat_actor":      first(otx.get("threat_actor"), tf.get("threat_actor")),
+        "attack_techniques": otx.get("attack_techniques") or [],
+        "related_iocs":      (tf.get("related_iocs") or otx.get("related_iocs") or
+                              uh.get("related_iocs") or [])[:8],
+        # Botnet C2 context (Feodo Tracker)
+        "is_botnet_c2":      ok("feodotracker") and fd.get("verdict_hint") == "malicious",
+        "botnet_family":     fd.get("malware_family"),
+        # OTX pulses
+        "otx_pulse_count":   otx.get("pulse_count", 0),
+        # RIPEstat technical
+        "abuse_contact":     ripe.get("abuse_contact"),
+        "bgp_prefix":        first(ripe.get("bgp_prefix"), sh.get("network"), vt.get("network")),
+        "rir":               ripe.get("rir"),
+        "asn_rank":          ripe.get("asn_rank"),
+        "asn_rank_position": ripe.get("asn_rank_position"),
+        # CIRCL hashlookup
+        "known_file":        hl.get("known_file"),
+        "known_file_name":   hl.get("known_file_name"),
+        # Passive DNS
+        "passive_dns":       dns.get("passive_dns") or [],
+        # Override hostnames with passive DNS co-hosts for IPs
+        "pdns_hostnames":    dns.get("hostnames") or [],
     }
 
     return templates.TemplateResponse("results.html", {
@@ -785,30 +819,31 @@ async def rescan(
 _SCAN_NOISE = (
     # ── Scan-metadata (tool ran a scan, not an indicator event) ─────
     "shodan indexed",
-    "shodan — ",             # all shodan entries are scan metadata
-    "pulsedive — ",          # pulsedive scan results
+    "shodan — ",
+    "pulsedive — ",
     "pulsedive host scan",
     "first seen by pulsedive",
-    "criminal ip — ",        # score summary — not an event
+    "criminal ip — ",
     "criminalip — ",
-    "virustotal — clean",    # 0 detections = no event
-    "urlscan — http",        # scan result
+    "virustotal — clean",
+    "urlscan — http",
     "urlscan — scanned",
     "urlscan — scan",
     "analysis complete",
     "first scanned",
     "resolves to:",
-    "securitytrails — ",     # dns/whois — already in tech info
+    "securitytrails — ",
     "dns records",
-    "whatsMyName",           # social hits — not IOC activity
-    "found on ",             # WMN platform hits
-    "page captured",         # URLScan description
+    "whatsMyName",
+    "found on ",
+    "page captured",
     "scan complete",
-    " ports found",          # Shodan port count
-    " open port",            # Shodan port count
-    "risk score",            # CriminalIP score summary
-    # Keep: abuse reports, malware detections, CVE detections, spam reports,
-    #       redirect chains, registration/expiry dates, threat feed appearances
+    " ports found",
+    " open port",
+    "risk score",
+    "passive dns —",         # pdns is informational, not events
+    "ripestat — ",           # routing info not an event
+    # Keep: threatfox, urlhaus, feodo, otx, abuseipdb, mb, sfs
 )
 
 
@@ -1320,6 +1355,14 @@ async def _results_page_inner(
     mb  = sources.get("malwarebazaar",   {})
     wmn = sources.get("whatsmyname",     {})
     sfs = sources.get("stopforumspam",   {})
+    # ── New sources ───────────────────────────────────────────────────
+    tf  = sources.get("threatfox",       {})
+    uh  = sources.get("urlhaus",         {})
+    fd  = sources.get("feodotracker",    {})
+    otx = sources.get("otx",            {})
+    ripe= sources.get("ripestat",        {})
+    hl  = sources.get("hashlookup",      {})
+    dns = sources.get("passivedns",      {})
 
     def _to_int(val) -> int | None:
         """Normalize http_status to int — URLScan returns string."""
@@ -1780,30 +1823,31 @@ async def rescan(
 _SCAN_NOISE = (
     # ── Scan-metadata (tool ran a scan, not an indicator event) ─────
     "shodan indexed",
-    "shodan — ",             # all shodan entries are scan metadata
-    "pulsedive — ",          # pulsedive scan results
+    "shodan — ",
+    "pulsedive — ",
     "pulsedive host scan",
     "first seen by pulsedive",
-    "criminal ip — ",        # score summary — not an event
+    "criminal ip — ",
     "criminalip — ",
-    "virustotal — clean",    # 0 detections = no event
-    "urlscan — http",        # scan result
+    "virustotal — clean",
+    "urlscan — http",
     "urlscan — scanned",
     "urlscan — scan",
     "analysis complete",
     "first scanned",
     "resolves to:",
-    "securitytrails — ",     # dns/whois — already in tech info
+    "securitytrails — ",
     "dns records",
-    "whatsMyName",           # social hits — not IOC activity
-    "found on ",             # WMN platform hits
-    "page captured",         # URLScan description
+    "whatsMyName",
+    "found on ",
+    "page captured",
     "scan complete",
-    " ports found",          # Shodan port count
-    " open port",            # Shodan port count
-    "risk score",            # CriminalIP score summary
-    # Keep: abuse reports, malware detections, CVE detections, spam reports,
-    #       redirect chains, registration/expiry dates, threat feed appearances
+    " ports found",
+    " open port",
+    "risk score",
+    "passive dns —",         # pdns is informational, not events
+    "ripestat — ",           # routing info not an event
+    # Keep: threatfox, urlhaus, feodo, otx, abuseipdb, mb, sfs
 )
 
 
