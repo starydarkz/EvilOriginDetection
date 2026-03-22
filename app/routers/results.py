@@ -1077,7 +1077,10 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
             # Use the direct scan result URL if stored, else fall back to search
             if ioc_type == "url":
                 return f"https://urlscan.io/search/#page.url:{quote(value, safe='')}"
-            return f"https://urlscan.io/search/#domain:{quote(value, safe='')}"
+            elif ioc_type == "ip":
+                return f"https://urlscan.io/search/#page.ip:{quote(value, safe='')}"
+            # domain: use page.domain: query (not domain: which is too broad)
+            return f"https://urlscan.io/search/#page.domain:{quote(value, safe='')}"
         case "securitytrails":
             if ioc_type == "ip":
                 return f"https://securitytrails.com/list/ip/{value}"
@@ -2185,7 +2188,10 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
             # Use the direct scan result URL if stored, else fall back to search
             if ioc_type == "url":
                 return f"https://urlscan.io/search/#page.url:{quote(value, safe='')}"
-            return f"https://urlscan.io/search/#domain:{quote(value, safe='')}"
+            elif ioc_type == "ip":
+                return f"https://urlscan.io/search/#page.ip:{quote(value, safe='')}"
+            # domain: use page.domain: query (not domain: which is too broad)
+            return f"https://urlscan.io/search/#page.domain:{quote(value, safe='')}"
         case "securitytrails":
             if ioc_type == "ip":
                 return f"https://securitytrails.com/list/ip/{value}"

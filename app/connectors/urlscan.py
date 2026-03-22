@@ -77,10 +77,17 @@ class URLScanConnector(BaseConnector):
 
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         # Build search query
+        # URLScan query syntax:
+        # page.url:"X"   = exact URL match
+        # page.domain:X  = pages WHERE the top-level domain IS X (correct for domains)
+        # domain:X       = pages that LOADED any resource from X (too broad, wrong)
         if ioc.type == IOCType.url:
             query = f'page.url:"{ioc.value}"'
+        elif ioc.type == IOCType.ip:
+            query = f"page.ip:{ioc.value}"
         else:
-            query = f"domain:{ioc.value}"
+            # For domains: match pages hosted ON the domain
+            query = f"page.domain:{ioc.value}"
 
         headers = {"API-Key": self.api_key} if self.api_key else {}
 
@@ -90,6 +97,11 @@ class URLScanConnector(BaseConnector):
             follow_redirects=True,
         ) as c:
             # ── Step 1: Search existing scans ─────────────────────
+            try:
+                from app.logger import app_logger
+                app_logger.info(f"[urlscan] searching query={query!r}")
+            except Exception:
+                pass
             r = await c.get(
                 SEARCH,
                 params={"q": query, "size": "1", "sort": "date:desc"},
@@ -111,6 +123,18 @@ class URLScanConnector(BaseConnector):
                 "first_uuid": results[0].get("task",{}).get("uuid") if results else None,
                 "first_screenshot": results[0].get("task",{}).get("screenshotURL") if results else None,
             }
+            try:
+                from app.logger import app_logger
+                first_url = (results[0].get("page",{}).get("url","") or results[0].get("task",{}).get("url","")) if results else "no results"
+                app_logger.info(
+                    f"[urlscan] query={query!r} → "
+                    f"total={data.get('total',0)} hits, "
+                    f"first_url={first_url!r}, "
+                    f"http_status={results[0].get('page',{}).get('status') if results else 'N/A'}, "
+                    f"uuid={data['_debug_search']['first_uuid']!r}"
+                )
+            except Exception:
+                pass
 
             # ── Step 2: Submit new scan if nothing found ───────────
             if not results and self.api_key:

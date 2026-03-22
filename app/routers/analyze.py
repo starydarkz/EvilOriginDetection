@@ -129,27 +129,37 @@ async def analyze_single(
     for r in norm_results:
         if r.status.value == "error":
             app_logger.warning(f"  [{r.source}] status=error — {r.error}")
-            # Show raw response body on error when DEBUG enabled
-            if r.raw and app_logger.isEnabledFor(10):  # DEBUG=10
+            # Always show raw body for errors (helps diagnose)
+            if r.raw:
                 raw_preview = str(r.raw)[:400]
-                app_logger.debug(f"  [{r.source}] raw={raw_preview}")
+                app_logger.warning(f"  [{r.source}] raw={raw_preview}")
         elif r.status.value == "ok":
             app_logger.debug(
                 f"  [{r.source}] ok — verdict={r.verdict_hint} "
                 f"ms={r.fetched_ms} tags={r.tags[:3] if r.tags else []}"
             )
-            # Detailed debug per source
-            if app_logger.isEnabledFor(10):
-                details = []
-                if r.abuse_score   is not None: details.append(f"abuse_score={r.abuse_score}")
-                if r.malware_family:            details.append(f"family={r.malware_family}")
-                if r.ports:                     details.append(f"ports={r.ports[:5]}")
-                if r.http_status:               details.append(f"http={r.http_status}")
-                if r.screenshot_url:            details.append(f"screenshot=YES")
-                if r.passive_dns:               details.append(f"pdns={len(r.passive_dns)}")
-                if r.technologies:              details.append(f"techs={len(r.technologies)}")
-                if details:
-                    app_logger.debug(f"  [{r.source}] detail: {' | '.join(details)}")
+            # Detailed INFO log per source — always visible without DEBUG level
+            details = []
+            if r.abuse_score   is not None: details.append(f"abuse={r.abuse_score}")
+            if r.malicious_count is not None and r.total_engines:
+                details.append(f"engines={r.malicious_count}/{r.total_engines}")
+            if r.malware_family:            details.append(f"family={r.malware_family}")
+            if r.ports:                     details.append(f"ports={r.ports[:5]}")
+            if r.http_status:               details.append(f"http={r.http_status}")
+            if r.http_title:                details.append(f"title={r.http_title[:30]!r}")
+            if r.screenshot_url:            details.append(f"screenshot=YES")
+            if r.link_domains:              details.append(f"link_domains={len(r.link_domains)}")
+            if r.passive_dns:               details.append(f"pdns={len(r.passive_dns)}")
+            if r.technologies:              details.append(f"techs={r.technologies[:3]}")
+            if r.country:                   details.append(f"country={r.country}")
+            if r.org:                       details.append(f"org={r.org[:20]!r}")
+            if r.credential_leaks:          details.append(f"cred_leaks={len(r.credential_leaks)}")
+            if details:
+                app_logger.info(f"  [{r.source}] {' | '.join(details)}")
+            # Raw response preview at DEBUG level
+            if app_logger.isEnabledFor(10) and r.raw:
+                raw_preview = str(r.raw)[:300]
+                app_logger.debug(f"  [{r.source}] raw={raw_preview}")
             # SFS specific
             if r.source == "stopforumspam" and r.raw:
                 ip_data  = r.raw.get("ip", {}) or {}

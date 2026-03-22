@@ -31,6 +31,17 @@ class VirusTotalConnector(BaseConnector):
             r = await client.get(f"{BASE}{endpoint}")
             r.raise_for_status()
             data = r.json()
+            try:
+                from app.logger import app_logger
+                attrs = data.get("data",{}).get("attributes",{})
+                app_logger.info(
+                    f"[virustotal] endpoint={endpoint!r} "
+                    f"status={r.status_code} "
+                    f"malicious={attrs.get('last_analysis_stats',{}).get('malicious','?')} "
+                    f"total={sum(attrs.get('last_analysis_stats',{}).values()) if attrs.get('last_analysis_stats') else '?'}"
+                )
+            except Exception:
+                pass
 
             # Fetch relations for graph enrichment
             relations = await self._fetch_relations(client, ioc, endpoint)
@@ -73,6 +84,23 @@ class VirusTotalConnector(BaseConnector):
                     items = r.json().get("data", [])
                     if items:
                         relations[rel] = items
+                    try:
+                        from app.logger import app_logger
+                        # Log meaningful_name from first item if available
+                        first_attrs = items[0].get("attributes",{}) if items else {}
+                        mname = first_attrs.get("meaningful_name","")
+                        app_logger.info(
+                            f"[virustotal] relations/{rel} → {len(items)} items"
+                            + (f" first_name={mname!r}" if mname else "")
+                        )
+                    except Exception:
+                        pass
+                elif r.status_code != 404:
+                    try:
+                        from app.logger import app_logger
+                        app_logger.info(f"[virustotal] relations/{rel} → HTTP {r.status_code}")
+                    except Exception:
+                        pass
             except Exception:
                 pass   # relations are best-effort
 

@@ -15,7 +15,7 @@ services:
       - key: CACHE_TTL_HOURS
         value: "24"
       - key: LOG_LEVEL
-        value: "INFO"
+        value: "DEBUG"
       - key: DB_PATH
         value: "/tmp/eod.db"
       - key: LOG_PATH

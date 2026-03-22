@@ -59,6 +59,12 @@ class URLQueryConnector(BaseConnector):
                     params={"query": query_val},
                     headers=headers,
                 )
+                try:
+                    from app.logger import app_logger
+                    rep_body = rep.text[:200] if rep.status_code != 200 else str(rep.json())[:100]
+                    app_logger.info(f"[urlquery] reputation status={rep.status_code} body={rep_body!r}")
+                except Exception:
+                    pass
                 if rep.status_code == 200:
                     result["_reputation"] = rep.json()
                 elif rep.status_code in (401, 403):
@@ -78,6 +84,21 @@ class URLQueryConnector(BaseConnector):
                 if s.status_code == 200:
                     search_data = s.json()
                     result["_search"] = search_data
+                    try:
+                        from app.logger import app_logger
+                        app_logger.info(
+                            f"[urlquery] search status={s.status_code} "
+                            f"total_hits={search_data.get('total_hits',0)} "
+                            f"reports={len(search_data.get('reports',[]))}"
+                        )
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        from app.logger import app_logger
+                        app_logger.warning(f"[urlquery] search status={s.status_code} body={s.text[:200]!r}")
+                    except Exception:
+                        pass
 
                     # ── Step 3: Fetch latest full report ──────────
                     reports = search_data.get("reports", [])
