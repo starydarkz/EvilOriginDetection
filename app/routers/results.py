@@ -420,14 +420,12 @@ async def _results_page_inner(
 
         # ── New sources — threat intel ────────────────────────────
         "threat_type":       first(tf.get("threat_type"),  uh.get("threat_type"),
-                                   fd.get("threat_type"),  otx.get("threat_type")),
-        "threat_actor":      first(otx.get("threat_actor"), tf.get("threat_actor")),
+                                   fd.get("threat_type")),
+        "threat_actor":      first(tf.get("threat_actor"), uh.get("threat_actor")),
         "related_iocs":      (tf.get("related_iocs") or uh.get("related_iocs") or [])[:8],
         # Botnet C2 context (Feodo Tracker)
         "is_botnet_c2":      ok("feodotracker") and fd.get("verdict_hint") == "malicious",
         "botnet_family":     fd.get("malware_family"),
-        # OTX pulses
-        "otx_pulse_count":   otx.get("pulse_count", 0),
         # RIPEstat technical
         "abuse_contact":     ripe.get("abuse_contact"),
         "bgp_prefix":        first(ripe.get("bgp_prefix"), sh.get("network"), vt.get("network")),
