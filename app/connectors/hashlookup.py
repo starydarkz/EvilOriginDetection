@@ -44,15 +44,22 @@ class HashlookupConnector(BaseConnector):
         else:
             return {"_unsupported": True}
 
-        async with httpx.AsyncClient(timeout=self.TIMEOUT) as c:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; EOD/1.0; threat intelligence)"}
+        async with httpx.AsyncClient(timeout=self.TIMEOUT, headers=headers) as c:
             r = await c.get(f"{HASHLOOKUP}/{algo}/{h}")
             if r.status_code == 404:
                 return {"_not_found": True}
+            if r.status_code in (401, 403):
+                return {"_blocked": True, "_status": r.status_code}
             r.raise_for_status()
             return r.json()
 
     def normalize(self, raw: dict, ioc: ParsedIOC,
                   result: NormalizedResult) -> None:
+        if raw.get("_blocked"):
+            result.verdict_hint = "unknown"
+            result.error = f"Blocked (HTTP {raw.get('_status', 401)})"
+            return
         if raw.get("_not_found") or raw.get("_unsupported"):
             result.verdict_hint = "unknown"
             return
@@ -132,7 +139,10 @@ class PassiveDNSConnector(BaseConnector):
             r = await c.get(
                 f"{PDNS}/{ip}",
                 params={"limit": 25},
-                headers={"Accept": "application/json"},
+                headers={
+                    "Accept":     "application/json",
+                    "User-Agent": "Mozilla/5.0 (compatible; EOD/1.0; threat intelligence)",
+                },
             )
             if r.status_code in (404, 400):
                 return {"_not_found": True}

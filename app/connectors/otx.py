@@ -37,7 +37,7 @@ class OTXConnector(BaseConnector):
 
         type_path = _TYPE_PATH.get(ioc.type, "IPv4")
         url       = f"{BASE}/{type_path}/{ioc.value}/general"
-        headers   = {}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; EOD/1.0; threat intelligence)"}
         if self.api_key:
             headers["X-OTX-API-KEY"] = self.api_key
 
@@ -46,11 +46,17 @@ class OTXConnector(BaseConnector):
             r = await c.get(url, headers=headers)
             if r.status_code == 404:
                 return {"_not_found": True}
+            if r.status_code in (401, 403):
+                return {"_blocked": True, "_status": r.status_code}
             r.raise_for_status()
             return r.json()
 
     def normalize(self, raw: dict, ioc: ParsedIOC,
                   result: NormalizedResult) -> None:
+        if raw.get("_blocked"):
+            result.verdict_hint = "unknown"
+            result.error = f"Blocked (HTTP {raw.get('_status', 401)})"
+            return
         if raw.get("_not_found"):
             result.verdict_hint = "unknown"
             return

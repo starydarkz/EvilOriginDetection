@@ -223,12 +223,31 @@ class BaseConnector(abc.ABC):
             result.raw = raw
             self.normalize(raw, ioc, result)
             result.status = SourceStatus.ok
+            try:
+                from app.logger import app_logger
+                app_logger.debug(
+                    f"[{self.SOURCE_NAME}] {ioc.value} "
+                    f"verdict={result.verdict_hint} "
+                    f"ms={result.fetched_ms}"
+                )
+            except Exception:
+                pass
         except httpx.TimeoutException:
             result.status     = SourceStatus.timeout
             result.error      = "Request timed out"
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
+            # Log the actual HTTP response body for debugging
+            try:
+                from app.logger import app_logger
+                body_preview = exc.response.text[:300] if exc.response else ""
+                app_logger.debug(
+                    f"[{self.SOURCE_NAME}] {ioc.value} "
+                    f"HTTP {code} body={body_preview!r}"
+                )
+            except Exception:
+                pass
             if code == 404:
                 # Not in this source's database — unknown verdict, not an error
                 result.status       = SourceStatus.ok
@@ -243,7 +262,10 @@ class BaseConnector(abc.ABC):
                 result.error  = "Out of credits"
             elif code == 401:
                 result.status = SourceStatus.error
-                result.error  = "Invalid API key"
+                if not self.requires_key():
+                    result.error = "Blocked (datacenter IP or bot UA)"
+                else:
+                    result.error = "Invalid API key"
             else:
                 result.status = SourceStatus.error
                 result.error  = f"HTTP {code}"
@@ -252,6 +274,14 @@ class BaseConnector(abc.ABC):
             result.status     = SourceStatus.error
             result.error      = str(exc)
             result.fetched_ms = int((time.monotonic() - t0) * 1000)
+            try:
+                from app.logger import app_logger
+                app_logger.debug(
+                    f"[{self.SOURCE_NAME}] {ioc.value} "
+                    f"EXCEPTION: {type(exc).__name__}: {exc}"
+                )
+            except Exception:
+                pass
 
         return result
 

@@ -59,14 +59,24 @@ class ThreatFoxConnector(BaseConnector):
 
         body = {"query": "search_ioc", "search_term": value}
 
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent":   "Mozilla/5.0 (compatible; EOD/1.0; threat intelligence)",
+        }
         async with httpx.AsyncClient(timeout=self.TIMEOUT) as c:
-            r = await c.post(API, json=body,
-                             headers={"Content-Type": "application/json"})
+            r = await c.post(API, json=body, headers=headers)
+            if r.status_code in (401, 403):
+                return {"_blocked": True, "_status": r.status_code,
+                        "_body": r.text[:200]}
             r.raise_for_status()
             return r.json()
 
     def normalize(self, raw: dict, ioc: ParsedIOC,
                   result: NormalizedResult) -> None:
+        if raw.get("_blocked"):
+            result.verdict_hint = "unknown"
+            result.error = f"Blocked by abuse.ch (HTTP {raw.get('_status',401)})"
+            return
         if raw.get("query_status") == "no_result" or not raw.get("data"):
             result.verdict_hint = "unknown"
             return

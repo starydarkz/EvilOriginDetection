@@ -102,25 +102,34 @@ async def _results_page_inner(
         norm.setdefault("is_scanner", None)
         norm.setdefault("is_darkweb", None)
         norm.setdefault("is_cloud",   None)
-        # URLScan: extract result_url + rebuild screenshot_url if missing from cached data
+        # URLScan: extract all enriched fields from raw_json
         if sr.source == "urlscan":
             try:
                 raw_us = json.loads(sr.raw_json or "{}")
-                # Restore result link
                 if raw_us.get("_result_url"):
                     norm["result_url"] = raw_us["_result_url"]
-                # Rebuild screenshot from UUID if normalize() didn't set it
+                if raw_us.get("_dom_url"):
+                    norm["dom_url"] = raw_us["_dom_url"]
+                web_stats = raw_us.get("_web_stats") or {}
+                if web_stats:
+                    norm["web_stats"] = web_stats
+                if raw_us.get("_security_headers"):
+                    norm["security_headers"] = raw_us["_security_headers"]
+                if raw_us.get("_tls"):
+                    norm["tls"] = raw_us["_tls"]
+                if raw_us.get("_server_ip"):
+                    norm["server_ip"] = raw_us["_server_ip"]
+                _lists = raw_us.get("_lists") or {}
+                if _lists.get("linkDomains"):
+                    norm["link_domains"] = _lists["linkDomains"]
                 if not norm.get("screenshot_url"):
                     uuid_us = None
-                    # Try debug info first
                     dbg = raw_us.get("_debug_search") or {}
                     uuid_us = dbg.get("first_uuid")
-                    # Try results[0].task.uuid
                     if not uuid_us:
                         _res = raw_us.get("results", [])
                         if _res:
                             uuid_us = (_res[0].get("task") or {}).get("uuid")
-                    # Try result_url
                     if not uuid_us and norm.get("result_url"):
                         import re as _re2
                         _m = _re2.search(r'/result/([0-9a-fA-F-]{36})/', norm["result_url"])
@@ -620,20 +629,44 @@ async def _graph_data_inner(ioc_id: int, db):
             relations = raw.get("_relations", {})
 
             # Resolutions: IP↔Domain — add each as a SEPARATE typed node
+            # VT quirk: item.id sometimes = IPv6+hostname or IPv4+hostname concatenated
+            def _split_res_id(item_id):
+                """Split a possibly-concatenated VT resolution id into (ip, host)."""
+                # IPv6 prefix (hex groups with colons)
+                m6 = re.match(r'^([0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){2,7})([a-zA-Z].*)?$',
+                              item_id)
+                if m6 and ':' in m6.group(1):
+                    return m6.group(1), (m6.group(2) or "").strip()
+                # IPv4 prefix
+                m4 = re.match(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})([a-zA-Z].*)?$',
+                              item_id)
+                if m4:
+                    return m4.group(1), (m4.group(2) or "").strip()
+                # Pure domain
+                if '.' in item_id and not item_id.replace('.','').isdigit():
+                    return "", item_id
+                return item_id, ""
+
             for item in (relations.get("resolutions") or [])[:8]:
                 attr      = item.get("attributes", {}) or {}
                 ip_addr   = (attr.get("ip_address") or "").strip()
                 host_name = (attr.get("host_name")  or "").strip()
                 item_id   = (item.get("id") or "").strip()
-                if not ip_addr and not host_name and item_id:
-                    if "." in item_id and not item_id.replace(".", "").isdigit():
-                        host_name = item_id
-                    else:
-                        ip_addr = item_id
+
+                # Always try to split item.id in case attributes are missing
+                # or item.id itself is a concatenated ip+host string
+                if item_id and (not ip_addr or not host_name):
+                    _id_ip, _id_host = _split_res_id(item_id)
+                    if not ip_addr:
+                        ip_addr   = _id_ip
+                    if not host_name:
+                        host_name = _id_host
+
                 for val, rtype in [(ip_addr, "ip"), (host_name, "domain")]:
+                    val = val.strip()
                     if not val or val == ioc.value:
                         continue
-                    nid = f"vt_res_{val[:32]}"
+                    nid = f"vt_res_{val[:40]}"
                     if add_node(nid, val, rtype,
                                 source="virustotal",
                                 reason="DNS resolution (VirusTotal)"):
@@ -1196,25 +1229,34 @@ async def _results_page_inner(
         norm.setdefault("is_scanner", None)
         norm.setdefault("is_darkweb", None)
         norm.setdefault("is_cloud",   None)
-        # URLScan: extract result_url + rebuild screenshot_url if missing from cached data
+        # URLScan: extract all enriched fields from raw_json
         if sr.source == "urlscan":
             try:
                 raw_us = json.loads(sr.raw_json or "{}")
-                # Restore result link
                 if raw_us.get("_result_url"):
                     norm["result_url"] = raw_us["_result_url"]
-                # Rebuild screenshot from UUID if normalize() didn't set it
+                if raw_us.get("_dom_url"):
+                    norm["dom_url"] = raw_us["_dom_url"]
+                web_stats = raw_us.get("_web_stats") or {}
+                if web_stats:
+                    norm["web_stats"] = web_stats
+                if raw_us.get("_security_headers"):
+                    norm["security_headers"] = raw_us["_security_headers"]
+                if raw_us.get("_tls"):
+                    norm["tls"] = raw_us["_tls"]
+                if raw_us.get("_server_ip"):
+                    norm["server_ip"] = raw_us["_server_ip"]
+                _lists = raw_us.get("_lists") or {}
+                if _lists.get("linkDomains"):
+                    norm["link_domains"] = _lists["linkDomains"]
                 if not norm.get("screenshot_url"):
                     uuid_us = None
-                    # Try debug info first
                     dbg = raw_us.get("_debug_search") or {}
                     uuid_us = dbg.get("first_uuid")
-                    # Try results[0].task.uuid
                     if not uuid_us:
                         _res = raw_us.get("results", [])
                         if _res:
                             uuid_us = (_res[0].get("task") or {}).get("uuid")
-                    # Try result_url
                     if not uuid_us and norm.get("result_url"):
                         import re as _re2
                         _m = _re2.search(r'/result/([0-9a-fA-F-]{36})/', norm["result_url"])
@@ -1628,20 +1670,44 @@ async def _graph_data_inner(ioc_id: int, db):
             relations = raw.get("_relations", {})
 
             # Resolutions: IP↔Domain — add each as a SEPARATE typed node
+            # VT quirk: item.id sometimes = IPv6+hostname or IPv4+hostname concatenated
+            def _split_res_id(item_id):
+                """Split a possibly-concatenated VT resolution id into (ip, host)."""
+                # IPv6 prefix (hex groups with colons)
+                m6 = re.match(r'^([0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){2,7})([a-zA-Z].*)?$',
+                              item_id)
+                if m6 and ':' in m6.group(1):
+                    return m6.group(1), (m6.group(2) or "").strip()
+                # IPv4 prefix
+                m4 = re.match(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})([a-zA-Z].*)?$',
+                              item_id)
+                if m4:
+                    return m4.group(1), (m4.group(2) or "").strip()
+                # Pure domain
+                if '.' in item_id and not item_id.replace('.','').isdigit():
+                    return "", item_id
+                return item_id, ""
+
             for item in (relations.get("resolutions") or [])[:8]:
                 attr      = item.get("attributes", {}) or {}
                 ip_addr   = (attr.get("ip_address") or "").strip()
                 host_name = (attr.get("host_name")  or "").strip()
                 item_id   = (item.get("id") or "").strip()
-                if not ip_addr and not host_name and item_id:
-                    if "." in item_id and not item_id.replace(".", "").isdigit():
-                        host_name = item_id
-                    else:
-                        ip_addr = item_id
+
+                # Always try to split item.id in case attributes are missing
+                # or item.id itself is a concatenated ip+host string
+                if item_id and (not ip_addr or not host_name):
+                    _id_ip, _id_host = _split_res_id(item_id)
+                    if not ip_addr:
+                        ip_addr   = _id_ip
+                    if not host_name:
+                        host_name = _id_host
+
                 for val, rtype in [(ip_addr, "ip"), (host_name, "domain")]:
+                    val = val.strip()
                     if not val or val == ioc.value:
                         continue
-                    nid = f"vt_res_{val[:32]}"
+                    nid = f"vt_res_{val[:40]}"
                     if add_node(nid, val, rtype,
                                 source="virustotal",
                                 reason="DNS resolution (VirusTotal)"):

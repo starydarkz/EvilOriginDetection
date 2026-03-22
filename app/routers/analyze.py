@@ -53,7 +53,7 @@ settings  = get_settings()
 def build_connectors() -> list:
     """Instantiate all connectors with rotated keys."""
     s = settings
-    return [
+    connectors = [
         VirusTotalConnector(   pick_key(s.vt_key_1,              s.vt_key_2)),
         AbuseIPDBConnector(    pick_key(s.abuseipdb_key_1,       s.abuseipdb_key_2)),
         ShodanConnector(       pick_key(s.shodan_key_1,          s.shodan_key_2)),
@@ -110,6 +110,15 @@ async def analyze_single(
             return cached, []
 
     connectors   = build_connectors()
+    active = [c.SOURCE_NAME for c in connectors if c.supports(parsed)]
+    skipped_nokey = [c.SOURCE_NAME for c in connectors
+                     if c.supports(parsed) and c.requires_key() and not c.api_key]
+    app_logger.debug(
+        f"[analyze] {parsed.value!r} ({parsed.type.value}) — "
+        f"running {len(active)} connectors: {active}"
+    )
+    if skipped_nokey:
+        app_logger.warning(f"[analyze] no key for: {skipped_nokey}")
     source_tasks = [c.query(parsed) for c in connectors]
 
     # Run all connectors in parallel
@@ -119,11 +128,30 @@ async def analyze_single(
     for r in norm_results:
         if r.status.value == "error":
             app_logger.warning(f"  [{r.source}] status=error — {r.error}")
+            # Show raw response body on error when DEBUG enabled
+            if r.raw and app_logger.isEnabledFor(10):  # DEBUG=10
+                raw_preview = str(r.raw)[:400]
+                app_logger.debug(f"  [{r.source}] raw={raw_preview}")
         elif r.status.value == "ok":
-            app_logger.debug(f"  [{r.source}] ok — verdict={r.verdict_hint}")
-            # Extra debug for SFS to see what we get from evidence
+            app_logger.debug(
+                f"  [{r.source}] ok — verdict={r.verdict_hint} "
+                f"ms={r.fetched_ms} tags={r.tags[:3] if r.tags else []}"
+            )
+            # Detailed debug per source
+            if app_logger.isEnabledFor(10):
+                details = []
+                if r.abuse_score   is not None: details.append(f"abuse_score={r.abuse_score}")
+                if r.malware_family:            details.append(f"family={r.malware_family}")
+                if r.ports:                     details.append(f"ports={r.ports[:5]}")
+                if r.http_status:               details.append(f"http={r.http_status}")
+                if r.screenshot_url:            details.append(f"screenshot=YES")
+                if r.passive_dns:               details.append(f"pdns={len(r.passive_dns)}")
+                if r.technologies:              details.append(f"techs={len(r.technologies)}")
+                if details:
+                    app_logger.debug(f"  [{r.source}] detail: {' | '.join(details)}")
+            # SFS specific
             if r.source == "stopforumspam" and r.raw:
-                ip_data = r.raw.get("ip", {}) or {}
+                ip_data  = r.raw.get("ip", {}) or {}
                 evidence = ip_data.get("evidence") or []
                 assoc    = r.raw.get("_associated_emails", [])
                 app_logger.info(
@@ -134,6 +162,10 @@ async def analyze_single(
                 )
                 if evidence:
                     app_logger.info(f"  [stopforumspam] evidence[0] sample: {str(evidence[0])[:200]}")
+        elif r.status.value == "skipped":
+            app_logger.debug(f"  [{r.source}] skipped (IOC type not supported)")
+        elif r.status.value == "no_key":
+            app_logger.debug(f"  [{r.source}] no_key — skipping")
         else:
             app_logger.debug(f"  [{r.source}] status={r.status.value}")
 

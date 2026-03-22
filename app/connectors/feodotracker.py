@@ -46,7 +46,12 @@ class FeodoTrackerConnector(BaseConnector):
         async with _get_lock():
             now = time.monotonic()
             if now - _cache["ts"] > _CACHE_TTL or not _cache["data"]:
-                r = await httpx.AsyncClient(timeout=self.TIMEOUT).get(BLOCKLIST_URL)
+                _ua = {"User-Agent": "Mozilla/5.0 (compatible; EOD/1.0; threat intelligence)"}
+                r = await httpx.AsyncClient(timeout=self.TIMEOUT, headers=_ua).get(BLOCKLIST_URL)
+                if r.status_code in (401, 403):
+                    _cache["ts"] = now  # prevent immediate retry
+                    _cache["data"] = {}
+                    return {"_blocked": True, "_status": r.status_code}
                 r.raise_for_status()
                 entries = r.json()
                 if isinstance(entries, list):
@@ -62,6 +67,10 @@ class FeodoTrackerConnector(BaseConnector):
 
     def normalize(self, raw: dict, ioc: ParsedIOC,
                   result: NormalizedResult) -> None:
+        if raw.get("_blocked"):
+            result.verdict_hint = "unknown"
+            result.error = f"Blocked by abuse.ch (HTTP {raw.get('_status', 401)})"
+            return
         if raw.get("_not_found"):
             result.verdict_hint = "unknown"
             return

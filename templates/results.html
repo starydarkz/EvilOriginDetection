@@ -268,8 +268,8 @@
     <div class="section-card anim-fade-up anim-delay-2">
       <div class="section-card-title">🌐 Web Intelligence</div>
 
-      {# Status + title row #}
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      {# ── Status + title + links row ── #}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         {% if unified.http_status %}
         <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
           HTTP {{ unified.http_status }}
@@ -278,16 +278,27 @@
         {% if unified.http_title %}
         <span style="font-size:14px;font-weight:600;color:var(--text)">"{{ unified.http_title[:50] }}"</span>
         {% endif %}
-        {% if source_links.get('urlscan') and source_links.get('urlscan') != '#' %}
-        <a href="{{ source_links.get('urlscan') }}" target="_blank" rel="noopener"
-           style="margin-left:auto;font-size:11px;color:var(--teal);
-                  font-family:'Space Mono',monospace;text-decoration:none">
-          URLScan report ↗
-        </a>
-        {% endif %}
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          {% set _us = sources.get('urlscan',{}) %}
+          {% if _us.get('dom_url') %}
+          <a href="{{ _us.get('dom_url') }}" target="_blank" rel="noopener"
+             style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;
+                    text-decoration:none;border:1px solid var(--border);padding:2px 7px;border-radius:4px">
+            DOM ↗
+          </a>
+          {% endif %}
+          {% if source_links.get('urlscan') and source_links.get('urlscan') != '#' %}
+          <a href="{{ source_links.get('urlscan') }}" target="_blank" rel="noopener"
+             style="font-size:10px;color:var(--teal);font-family:'Space Mono',monospace;
+                    text-decoration:none;border:1px solid rgba(68,221,187,0.3);
+                    padding:2px 7px;border-radius:4px">
+            Full scan ↗
+          </a>
+          {% endif %}
+        </div>
       </div>
 
-      {# Screenshot thumbnail #}
+      {# ── Screenshot thumbnail ── #}
       {% if unified.screenshot_url %}
       <div style="margin-bottom:12px;border-radius:8px;overflow:hidden;
                   border:1px solid var(--border);position:relative;background:var(--bg3)">
@@ -313,7 +324,6 @@
       </div>
       <script>
       window.ssThumbFail = function(img) {
-        // Try proxy as fallback
         if (!img.src.includes('/proxy/')) {
           img.onerror = function() {
             document.getElementById('ss-thumb-loading').style.display = 'none';
@@ -326,13 +336,13 @@
       </script>
       {% endif %}
 
-      {# Tech stack #}
+      {# ── Tech stack ── #}
       {% if unified.technologies %}
       <div style="margin-bottom:10px">
         <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
                     text-transform:uppercase;color:var(--text3);margin-bottom:6px">Technologies</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px">
-          {% for tech in unified.technologies[:12] %}
+          {% for tech in unified.technologies[:15] %}
           <span style="font-size:11px;padding:2px 9px;background:var(--bg3);
                        border-radius:4px;border:1px solid var(--border2);color:var(--text2)">
             {{ tech }}
@@ -342,15 +352,89 @@
       </div>
       {% endif %}
 
-      {# Redirect chain #}
+      {# ── Security headers ── #}
+      {% set _us_src = sources.get('urlscan',{}) %}
+      {% if _us_src.get('security_headers') %}
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Security Headers</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          {% for hdr in _us_src.get('security_headers',{}).keys() %}
+          <span style="font-size:10px;padding:2px 7px;background:rgba(68,221,187,0.08);
+                       border-radius:4px;border:1px solid rgba(68,221,187,0.2);
+                       color:var(--teal);font-family:'Space Mono',monospace">
+            {{ hdr.replace('content-security-policy','CSP').replace('strict-transport-security','HSTS').replace('x-frame-options','X-Frame').replace('x-content-type-options','X-CTO') }}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# ── Web stats ── #}
+      {% set _ws = _us_src.get('web_stats',{}) %}
+      {% if _ws %}
+      <div style="margin-bottom:10px;display:flex;gap:16px;flex-wrap:wrap">
+        {% if _ws.get('uniq_ips') %}
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('uniq_ips') }}</div>
+          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Unique IPs</div>
+        </div>
+        {% endif %}
+        {% if _ws.get('total_links') %}
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('total_links') }}</div>
+          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Links</div>
+        </div>
+        {% endif %}
+        {% if _ws.get('total_cookies') %}
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('total_cookies') }}</div>
+          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Cookies</div>
+        </div>
+        {% endif %}
+        {% if _ws.get('benign_votes') or _ws.get('malicious_votes') %}
+        <div style="text-align:center">
+          <div style="font-size:13px;font-weight:700;font-family:'Outfit',sans-serif">
+            <span style="color:var(--v-clean)">{{ _ws.get('benign_votes',0) }}✓</span>
+            <span style="color:var(--text3);font-size:11px"> / </span>
+            <span style="color:var(--v-malicious)">{{ _ws.get('malicious_votes',0) }}✗</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Community</div>
+        </div>
+        {% endif %}
+        {% if _ws.get('server_ip') %}
+        <div>
+          <div style="font-size:12px;font-family:'Space Mono',monospace;color:var(--text2)">{{ _ws.get('server_ip') }}</div>
+          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Server IP</div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── TLS certificate ── #}
+      {% if _us_src.get('tls') %}
+      {% set _tls = _us_src.get('tls',{}) %}
+      <div style="margin-bottom:10px;padding:8px 10px;background:rgba(68,221,187,0.06);
+                  border-radius:6px;border:1px solid rgba(68,221,187,0.15)">
+        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.1em;
+                    text-transform:uppercase;color:var(--teal);margin-bottom:4px">🔒 TLS Certificate</div>
+        <div style="font-size:12px;color:var(--text2)">
+          {% if _tls.get('issuer') %}{{ _tls.get('issuer') }}{% endif %}
+          {% if _tls.get('valid_to') %} · expires {{ _tls.get('valid_to','')[:10] }}{% endif %}
+          {% if _tls.get('count') and _tls.get('count') > 1 %} · {{ _tls.get('count') }} certs{% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# ── Redirect chain ── #}
       {% if unified.redirects %}
       <div>
         <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
-                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Redirects</div>
+                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Redirect chain</div>
         <div style="font-size:11px;font-family:'Space Mono',monospace;
                     color:var(--text3);line-height:2;overflow-wrap:break-word">
           {% for r in unified.redirects[:5] %}
-          <span style="color:var(--text2)">{{ r[:70] }}{% if r|length > 70 %}…{% endif %}</span>
+          <span style="color:var(--text2)">{{ r[:75] }}{% if r|length > 75 %}…{% endif %}</span>
           {% if not loop.last %}<span style="color:var(--accent)"> → </span>{% endif %}
           {% endfor %}
         </div>

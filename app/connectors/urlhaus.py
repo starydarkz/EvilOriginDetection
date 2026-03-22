@@ -27,7 +27,9 @@ class URLhausConnector(BaseConnector):
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         import httpx
 
-        async with httpx.AsyncClient(timeout=self.TIMEOUT) as c:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; EOD/1.0; threat intelligence)"}
+
+        async with httpx.AsyncClient(timeout=self.TIMEOUT, headers=headers) as c:
             if ioc.type == IOCType.hash:
                 # Try sha256 first, then md5
                 r = await c.post(f"{API}/payload/",
@@ -46,12 +48,20 @@ class URLhausConnector(BaseConnector):
                 # IP or domain
                 r = await c.post(f"{API}/host/", data={"host": ioc.value})
 
+            if r.status_code in (401, 403):
+                return {"query_status": "blocked",
+                        "_blocked": True, "_status": r.status_code,
+                        "_body": r.text[:200]}
             r.raise_for_status()
             return r.json()
 
     def normalize(self, raw: dict, ioc: ParsedIOC,
                   result: NormalizedResult) -> None:
         status = raw.get("query_status", "")
+        if status == "blocked" or raw.get("_blocked"):
+            result.verdict_hint = "unknown"
+            result.error = f"Blocked by abuse.ch (HTTP {raw.get('_status', 401)})"
+            return
         if status in ("no_results", "invalid_host", "invalid_url",
                       "invalid_sha256_hash", "invalid_md5_hash"):
             result.verdict_hint = "unknown"
