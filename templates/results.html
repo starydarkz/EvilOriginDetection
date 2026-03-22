@@ -11,8 +11,8 @@
   align-items: start;
 }
 .results-main  { display:flex; flex-direction:column; gap:18px; }
-.results-side  { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; grid-column:3; }
-.results-graph { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; grid-column:2; }
+.results-side  { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; }
+.results-graph { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; }
 
 @media (max-width:1100px) {
   .results-layout { grid-template-columns:1fr 1fr; }
@@ -268,7 +268,7 @@
 
     {# ── SECTION 2a: WEB INTELLIGENCE (domain/url only) ── #}
     {% if ioc.type.value in ['domain','url'] %}
-    {% set has_web_data = unified.http_status or unified.http_title or unified.technologies or unified.screenshot_url or unified.redirects %}
+    {% set has_web_data = unified.http_status or unified.http_title or unified.technologies or unified.screenshot_url or unified.redirects or unified.urlscan_ok %}
     {% if has_web_data %}
     <div class="section-card anim-fade-up anim-delay-2">
       <div class="section-card-title">🌐 Web Intelligence</div>
@@ -1212,6 +1212,52 @@
 
   </div>{# end results-main #}
 
+  {# ═══ COLUMN 3: CORRELATION GRAPH ═══ #}
+  <div class="results-graph anim-fade-up anim-delay-2">
+    <div class="section-card" style="padding:0;overflow:hidden">
+      {# Header #}
+      <div style="display:flex;align-items:center;gap:10px;
+           padding:14px 16px;border-bottom:1px solid var(--border)">
+        <div class="section-card-title" style="margin:0;flex:1">
+          ⑦ Correlation Graph
+        </div>
+        <a href="/graph" target="_blank"
+           style="font-family:'Space Mono',monospace;font-size:10px;
+                  color:var(--text3);transition:color 0.15s"
+           onmouseover="this.style.color='var(--teal)'"
+           onmouseout="this.style.color='var(--text3)'">↗ Full</a>
+      </div>
+      {# Graph canvas #}
+      <div class="graph-wrap" style="border-radius:0;border:none">
+        <div id="graph-container" data-ioc-id="{{ ioc.id }}"
+             style="height:460px;position:relative">
+          <div id="graph-loading"
+               style="position:absolute;inset:0;display:flex;flex-direction:column;
+                      align-items:center;justify-content:center;gap:8px;color:var(--text3)">
+            <span style="font-size:24px;opacity:0.2">◎</span>
+            <span style="font-size:12px">Loading graph...</span>
+          </div>
+        </div>
+      </div>
+      {# Node detail panel #}
+      <div class="graph-info-panel">
+        <div id="graph-empty-state"
+             style="display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;gap:8px;color:var(--text3);
+                    text-align:center;padding:16px 0">
+          <span style="font-size:22px;opacity:0.15">◉</span>
+          <span style="font-family:'Space Mono',monospace;font-size:10px;
+                       letter-spacing:0.14em;text-transform:uppercase">Select a node</span>
+          <span style="font-size:12px;color:var(--text3);line-height:1.5;max-width:180px">
+            Click any node to see details
+          </span>
+        </div>
+        <div id="graph-node-detail" style="display:none"></div>
+      </div>
+    </div>
+  </div>{# end results-graph #}
+
+
   {# ═══ COLUMN 2: RIGHT SIDEBAR ═══ #}
   <div class="results-side">
 
@@ -1330,51 +1376,6 @@
     {% endif %}
 
   </div>{# end results-side #}
-
-  {# ═══ COLUMN 3: CORRELATION GRAPH ═══ #}
-  <div class="results-graph anim-fade-up anim-delay-2">
-    <div class="section-card" style="padding:0;overflow:hidden">
-      {# Header #}
-      <div style="display:flex;align-items:center;gap:10px;
-           padding:14px 16px;border-bottom:1px solid var(--border)">
-        <div class="section-card-title" style="margin:0;flex:1">
-          ⑦ Correlation Graph
-        </div>
-        <a href="/graph" target="_blank"
-           style="font-family:'Space Mono',monospace;font-size:10px;
-                  color:var(--text3);transition:color 0.15s"
-           onmouseover="this.style.color='var(--teal)'"
-           onmouseout="this.style.color='var(--text3)'">↗ Full</a>
-      </div>
-      {# Graph canvas #}
-      <div class="graph-wrap" style="border-radius:0;border:none">
-        <div id="graph-container" data-ioc-id="{{ ioc.id }}"
-             style="height:460px;position:relative">
-          <div id="graph-loading"
-               style="position:absolute;inset:0;display:flex;flex-direction:column;
-                      align-items:center;justify-content:center;gap:8px;color:var(--text3)">
-            <span style="font-size:24px;opacity:0.2">◎</span>
-            <span style="font-size:12px">Loading graph...</span>
-          </div>
-        </div>
-      </div>
-      {# Node detail panel #}
-      <div class="graph-info-panel">
-        <div id="graph-empty-state"
-             style="display:flex;flex-direction:column;align-items:center;
-                    justify-content:center;gap:8px;color:var(--text3);
-                    text-align:center;padding:16px 0">
-          <span style="font-size:22px;opacity:0.15">◉</span>
-          <span style="font-family:'Space Mono',monospace;font-size:10px;
-                       letter-spacing:0.14em;text-transform:uppercase">Select a node</span>
-          <span style="font-size:12px;color:var(--text3);line-height:1.5;max-width:180px">
-            Click any node to see details
-          </span>
-        </div>
-        <div id="graph-node-detail" style="display:none"></div>
-      </div>
-    </div>
-  </div>{# end results-graph #}
 
   </div>{# end results-layout #}
 

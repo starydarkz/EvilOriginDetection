@@ -125,12 +125,31 @@ async def _results_page_inner(
                     norm["link_domains"] = _lists["linkDomains"]
                 if not norm.get("screenshot_url"):
                     uuid_us = None
+                    # Try multiple sources for the UUID
                     dbg = raw_us.get("_debug_search") or {}
                     uuid_us = dbg.get("first_uuid")
                     if not uuid_us:
                         _res = raw_us.get("results", [])
                         if _res:
-                            uuid_us = (_res[0].get("task") or {}).get("uuid")
+                            task = (_res[0].get("task") or {})
+                            uuid_us = task.get("uuid")
+                            # Also try screenshotURL from task
+                            if not uuid_us:
+                                ss_url = task.get("screenshotURL") or task.get("screenshot") or ""
+                                import re as _re2a
+                                _mu = _re2a.search(r'screenshots/([0-9a-fA-F-]{36})', ss_url)
+                                if _mu: uuid_us = _mu.group(1)
+                    # Try detail response
+                    if not uuid_us:
+                        _detail = raw_us.get("_detail") or {}
+                        _dtask  = _detail.get("task") or {}
+                        uuid_us = _dtask.get("uuid")
+                        if not uuid_us:
+                            ss_url2 = _dtask.get("screenshotURL") or ""
+                            import re as _re2b
+                            _mu2 = _re2b.search(r'screenshots/([0-9a-fA-F-]{36})', ss_url2)
+                            if _mu2: uuid_us = _mu2.group(1)
+                    # Try extracting from result_url
                     if not uuid_us and norm.get("result_url"):
                         import re as _re2
                         _m = _re2.search(r'/result/([0-9a-fA-F-]{36})/', norm["result_url"])
@@ -511,7 +530,12 @@ async def graph_data(
     Returns Cytoscape.js-compatible graph data for the IOC and its artifacts.
     """
     try:
-        return await _graph_data_inner(ioc_id, db)
+        data = await _graph_data_inner(ioc_id, db)
+        app_logger.debug(
+            f"[graph] ioc={ioc_id} nodes={len(data.get('nodes',[]))} "
+            f"edges={len(data.get('edges',[]))}"
+        )
+        return data
     except HTTPException:
         raise
     except Exception as exc:
@@ -1290,12 +1314,31 @@ async def _results_page_inner(
                     norm["link_domains"] = _lists["linkDomains"]
                 if not norm.get("screenshot_url"):
                     uuid_us = None
+                    # Try multiple sources for the UUID
                     dbg = raw_us.get("_debug_search") or {}
                     uuid_us = dbg.get("first_uuid")
                     if not uuid_us:
                         _res = raw_us.get("results", [])
                         if _res:
-                            uuid_us = (_res[0].get("task") or {}).get("uuid")
+                            task = (_res[0].get("task") or {})
+                            uuid_us = task.get("uuid")
+                            # Also try screenshotURL from task
+                            if not uuid_us:
+                                ss_url = task.get("screenshotURL") or task.get("screenshot") or ""
+                                import re as _re2a
+                                _mu = _re2a.search(r'screenshots/([0-9a-fA-F-]{36})', ss_url)
+                                if _mu: uuid_us = _mu.group(1)
+                    # Try detail response
+                    if not uuid_us:
+                        _detail = raw_us.get("_detail") or {}
+                        _dtask  = _detail.get("task") or {}
+                        uuid_us = _dtask.get("uuid")
+                        if not uuid_us:
+                            ss_url2 = _dtask.get("screenshotURL") or ""
+                            import re as _re2b
+                            _mu2 = _re2b.search(r'screenshots/([0-9a-fA-F-]{36})', ss_url2)
+                            if _mu2: uuid_us = _mu2.group(1)
+                    # Try extracting from result_url
                     if not uuid_us and norm.get("result_url"):
                         import re as _re2
                         _m = _re2.search(r'/result/([0-9a-fA-F-]{36})/', norm["result_url"])
@@ -1595,7 +1638,12 @@ async def graph_data(
     Returns Cytoscape.js-compatible graph data for the IOC and its artifacts.
     """
     try:
-        return await _graph_data_inner(ioc_id, db)
+        data = await _graph_data_inner(ioc_id, db)
+        app_logger.debug(
+            f"[graph] ioc={ioc_id} nodes={len(data.get('nodes',[]))} "
+            f"edges={len(data.get('edges',[]))}"
+        )
+        return data
     except HTTPException:
         raise
     except Exception as exc:

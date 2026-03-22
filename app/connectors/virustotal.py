@@ -61,7 +61,13 @@ class VirusTotalConnector(BaseConnector):
             try:
                 r = await client.get(
                     f"{BASE}{endpoint}/relationships/{rel}",
-                    params={"limit": "5"}
+                    params={
+                        "limit": "5",
+                        # Request full attributes for meaningful_name, classification etc.
+                        "relationships_attributes": "type_description,meaningful_name,"
+                                                    "popular_threat_classification,"
+                                                    "popular_threat_label",
+                    }
                 )
                 if r.status_code == 200:
                     items = r.json().get("data", [])

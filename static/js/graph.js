@@ -24,7 +24,12 @@
           showEmpty('No data to graph');
           return;
         }
-        // Always render — even if only central node exists
+        if (data.nodes.length === 1) {
+          // Only the central node — no correlations found yet
+          showEmpty('No correlations found — rescan to enrich');
+          renderGraph(data);  // still render the central node
+          return;
+        }
         renderGraph(data);
         if (loadingEl) loadingEl.style.display = 'none';
 
@@ -118,9 +123,15 @@
           'label':              ele => {
             const d   = ele.data();
             const lbl = d.label || '';
-            // For hash nodes: prefer file_name as display label
-            if (d.type === 'hash' && d.file_name && !d.central) {
-              return d.file_name.length > 20 ? d.file_name.slice(0, 18) + '…' : d.file_name;
+            // For hash nodes: prefer file_name > malware_family > truncated hash
+            if (d.type === 'hash' && !d.central) {
+              if (d.file_name) {
+                return d.file_name.length > 20 ? d.file_name.slice(0, 18) + '…' : d.file_name;
+              }
+              if (d.malware_family) {
+                const mf = d.malware_family;
+                return mf.length > 20 ? mf.slice(0, 18) + '…' : mf;
+              }
             }
             // Truncate long hashes/values for canvas display
             if (lbl.length > 22 && !d.central) {
