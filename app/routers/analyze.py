@@ -73,6 +73,7 @@ def build_connectors() -> list:
         HashlookupConnector(   api_key=None),
         PassiveDNSConnector(   api_key=None),
     ]
+    return connectors
 
 
 # ── Cache check ───────────────────────────────────────────────────────────────
