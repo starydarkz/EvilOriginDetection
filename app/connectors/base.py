@@ -234,6 +234,19 @@ class BaseConnector(abc.ABC):
                 )
             except Exception:
                 pass
+        except NameError as _ne:
+            import traceback as _tb
+            result.status = SourceStatus.error
+            result.error  = str(_ne)
+            result.raw    = raw if 'raw' in dir() else {}
+            try:
+                from app.logger import app_logger
+                app_logger.error(
+                    f"[{self.SOURCE_NAME}] NameError in normalize: {_ne}\n"
+                    f"{_tb.format_exc()}"
+                )
+            except Exception:
+                pass
         except httpx.TimeoutException:
             result.status     = SourceStatus.timeout
             result.error      = "Request timed out"

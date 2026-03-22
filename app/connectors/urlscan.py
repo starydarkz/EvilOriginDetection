@@ -104,7 +104,7 @@ class URLScanConnector(BaseConnector):
                 pass
             r = await c.get(
                 SEARCH,
-                params={"q": query, "size": "3", "sort": "date:desc"},
+                params={"q": query, "size": "3"},
                 headers=headers,
             )
 

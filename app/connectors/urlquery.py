@@ -53,12 +53,35 @@ class URLQueryConnector(BaseConnector):
         async with httpx.AsyncClient(timeout=self.TIMEOUT,
                                      follow_redirects=True) as c:
             # ── Step 1: Reputation check (fast) ───────────────────
+            # Try both with header key and query param key
+            rep_urls = [
+                (f"{BASE}/public/v1/reputation/check/", {"query": query_val}, headers),
+                (f"{BASE}/reputation/check/",           {"query": query_val}, headers),
+                (f"{BASE}/public/v1/reputation/check/", {"query": query_val, "apikey": self.api_key}, {"Accept":"application/json"}),
+            ]
             try:
-                rep = await c.get(
-                    f"{BASE}/public/v1/reputation/check/",
-                    params={"query": query_val},
-                    headers=headers,
-                )
+                rep = None
+                for _url, _params, _hdrs in rep_urls:
+                    try:
+                        _r = await c.get(_url, params=_params, headers=_hdrs)
+                        try:
+                            from app.logger import app_logger
+                            app_logger.info(f"[urlquery] probe {_url} → {_r.status_code} body={_r.text[:80]!r}")
+                        except Exception: pass
+                        if _r.status_code == 200:
+                            rep = _r
+                            break
+                        elif _r.status_code in (401, 403):
+                            rep = _r
+                            break  # auth issue, no point trying others
+                    except Exception as _pe:
+                        try:
+                            from app.logger import app_logger
+                            app_logger.warning(f"[urlquery] probe error {_url}: {_pe}")
+                        except Exception: pass
+                if rep is None:
+                    return {"_blocked": True, "_status": 404}
+                rep = rep  # use the last attempted
                 try:
                     from app.logger import app_logger
                     rep_body = rep.text[:200] if rep.status_code != 200 else str(rep.json())[:100]

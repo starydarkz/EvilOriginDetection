@@ -227,11 +227,12 @@ class CriminalIPConnector(BaseConnector):
             }
             key = int(port) if port and str(port).isdigit() else 0
             vuln_port_map.setdefault(key, []).append(cve)
+        all_cves: list = []
         if vuln_port_map:
             # Store in raw for results.py to extract
             raw["_vuln_ports"] = {str(k): v for k, v in vuln_port_map.items()}
             # Also add top CVE IDs to tags
-            all_cves = [c["cve_id"] for cves in vuln_port_map.values() for c in cves]
+            all_cves = [c["cve_id"] for port_cves in vuln_port_map.values() for c in port_cves]
             result.tags.extend(all_cves[:5])
 
         # ── Connected domains → graph ──────────────────────────────
@@ -257,7 +258,7 @@ class CriminalIPConnector(BaseConnector):
         danger = (raw.get("dangerous_info") or {}).get("is_dangerous", False)
         sc     = result.abuse_score or 0
         result.verdict_hint = (
-            "malicious"  if danger or sc >= 60 or bool(cves) else
+            "malicious"  if danger or sc >= 60 or bool(all_cves) else
             "suspicious" if sc >= 40 else
             "clean"      if sc == 0  else "unknown"
         )
@@ -276,10 +277,10 @@ class CriminalIPConnector(BaseConnector):
                 "source": "criminalip",
                 "category": "threat" if danger else "host_info",
             })
-        if cves:
+        if all_cves:
             result.reports.append({
                 "date": None,
-                "summary": f"Vulnerabilities: {', '.join(cves[:4])}",
+                "summary": f"Vulnerabilities: {', '.join(all_cves[:4])}",
                 "source": "criminalip",
                 "category": "threat",
             })
