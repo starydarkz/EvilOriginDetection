@@ -22,9 +22,7 @@ WEIGHTS: dict[str, int] = {
     "virustotal":    45,
     "abuseipdb":     20,
     "malwarebazaar": 10,
-    "pulsedive":     10,
     "criminalip":     8,
-    "urlscan":        5,
     "stopforumspam":  5,
     "shodan":         3,
     "securitytrails": 2,
@@ -33,7 +31,6 @@ WEIGHTS: dict[str, int] = {
     "threatfox":     15,   # C2/malware IOC database — high signal
     "urlhaus":       10,   # active malware delivery URLs — high signal
     "feodotracker":  12,   # confirmed botnet C2 — very high signal
-    "otx":            8,   # community threat pulses
     "ripestat":       0,   # informational only (routing/ASN)
     "hashlookup":     8,   # known file verdict
     "passivedns":     0,   # informational only (DNS history)
@@ -41,28 +38,85 @@ WEIGHTS: dict[str, int] = {
 
 
 def compute_score(results: list[NormalizedResult]) -> tuple[int, Verdict]:
-    """Returns (score 0-100, verdict)."""
+    """Returns (score 0-100, verdict).
+
+    Hard overrides (bypass weighted average):
+    - Feodo Tracker hit → malicious (confirmed botnet C2)
+    - ThreatFox malicious hit → malicious
+    - MalwareBazaar found → malicious
+    - VT ≥ 5 engines → malicious
+    - AbuseIPDB ≥ 80% → malicious
+    - Credential leak detected → at least suspicious
+
+    Clean requires ALL primary sources (VT + AbuseIPDB) to confirm clean.
+    """
     total_weight = 0
     weighted_sum = 0.0
+
+    has_credential_leak = False
+    vt_engines     = 0
+    vt_malicious   = 0
+    abuse_score_v  = None
 
     for r in results:
         if r.status.value != "ok":
             continue
 
+        # ── Hard override checks ───────────────────────────────
+        # Confirmed botnet C2 / active malware distribution
+        if r.source in ("feodotracker", "urlhaus") and r.verdict_hint == "malicious":
+            return 95, Verdict.malicious
+
+        # ThreatFox with high confidence
+        if r.source == "threatfox" and r.verdict_hint == "malicious":
+            conf = r.abuse_score or 0
+            if conf >= 75:
+                return 92, Verdict.malicious
+
+        # MalwareBazaar — file is known malware
+        if r.source == "malwarebazaar" and r.verdict_hint == "malicious":
+            return 95, Verdict.malicious
+
+        # VT hard override — 5+ engines
+        if r.source == "virustotal" and r.total_engines:
+            vt_engines   = r.total_engines
+            vt_malicious = r.malicious_count or 0
+            if vt_malicious >= 5:
+                ratio = vt_malicious / vt_engines
+                return min(99, round(50 + ratio * 49)), Verdict.malicious
+
+        # AbuseIPDB hard override — ≥80%
+        if r.source == "abuseipdb" and r.abuse_score is not None:
+            abuse_score_v = r.abuse_score
+            if abuse_score_v >= 80:
+                return min(95, round(50 + abuse_score_v * 0.45)), Verdict.malicious
+
+        # Credential leak → at least suspicious
+        if r.credential_leaks:
+            has_credential_leak = True
+
+        # ── Weighted average ───────────────────────────────────
         weight = WEIGHTS.get(r.source, 2)
         ratio  = _source_ratio(r)
 
         if ratio is None:
-            continue   # source gave no scoreable signal
+            continue
 
         weighted_sum += ratio * weight
         total_weight += weight
 
     if total_weight == 0:
+        if has_credential_leak:
+            return 35, Verdict.suspicious
         return 0, Verdict.unknown
 
     raw_score = weighted_sum / total_weight * 100
     score     = max(0, min(100, round(raw_score)))
+
+    # Credential leak bumps to at least suspicious
+    if has_credential_leak and score < 30:
+        score = 30
+
     return score, _score_to_verdict(score)
 
 
@@ -94,18 +148,9 @@ def _source_ratio(r: NormalizedResult) -> float | None:
         return 0.0       # not found → not malicious (hash is clean)
 
     # ── Pulsedive — risk level from feeds ─────────────────────────
+    # ── Pulsedive — informational, excluded from scoring ────────────
     if r.source == "pulsedive":
-        hint = r.verdict_hint or "unknown"
-        ratio = {
-            "malicious":  1.0,
-            "suspicious": 0.5,
-            "clean":      0.05,
-            "unknown":    None,
-        }.get(hint)
-        if ratio is None and r.pulse_count:
-            # Has feeds but no clear verdict → mild signal
-            return min(r.pulse_count / 20, 0.4)
-        return ratio
+        return None  # enrichment only, not a threat signal
 
     # ── CriminalIP — risk score 0-100 ─────────────────────────────
     if r.source == "criminalip":
@@ -119,12 +164,9 @@ def _source_ratio(r: NormalizedResult) -> float | None:
         }.get(r.verdict_hint or "unknown")
 
     # ── URLScan — binary verdict from scan analysis ────────────────
+    # ── URLScan — informational, excluded from scoring ──────────────
     if r.source == "urlscan":
-        if r.verdict_hint == "malicious":
-            return 0.9
-        if r.verdict_hint == "unknown":
-            return 0.0   # scanned but no malicious verdict → clean signal
-        return None      # no scan result at all
+        return None  # enrichment only (screenshot, tech stack, etc.)
 
     # ── StopForumSpam — spam frequency ────────────────────────────
     if r.source == "stopforumspam":
@@ -178,16 +220,6 @@ def _source_ratio(r: NormalizedResult) -> float | None:
             return 1.0
         return None
 
-    # ── OTX — community threat pulses ────────────────────────────
-    if r.source == "otx":
-        if r.verdict_hint == "malicious":
-            return 1.0
-        if r.verdict_hint == "suspicious":
-            return 0.5
-        if r.pulse_count and r.pulse_count > 0:
-            return min(r.pulse_count / 10, 0.6)
-        return None
-
     # ── hashlookup — known file verdict ──────────────────────────
     if r.source == "hashlookup":
         if r.verdict_hint == "malicious":
@@ -200,10 +232,26 @@ def _source_ratio(r: NormalizedResult) -> float | None:
     if r.source in ("ripestat", "passivedns"):
         return None
 
+    # ── urlquery — direct reputation verdict ──────────────────────
+    if r.source == "urlquery":
+        if r.verdict_hint == "malicious":
+            return 1.0
+        if r.verdict_hint == "suspicious":
+            return 0.5
+        if r.verdict_hint == "clean":
+            return 0.0
+        return None
+
     return None
 
 
 def _score_to_verdict(score: int) -> Verdict:
-    if score >= 55: return Verdict.malicious
-    if score >= 22: return Verdict.suspicious
+    """
+    Verdict thresholds (calibrated for weighted scoring without pulsedive/urlscan):
+    - malicious:  score >= 60  (high confidence threat signal from core sources)
+    - suspicious: score >= 25  (some signal but not definitive)
+    - clean:      score < 25   (core sources confirm clean or no signal)
+    """
+    if score >= 60: return Verdict.malicious
+    if score >= 25: return Verdict.suspicious
     return Verdict.clean

@@ -39,8 +39,8 @@ from app.connectors.whatsmyname    import WhatsMyNameConnector
 from app.connectors.threatfox      import ThreatFoxConnector
 from app.connectors.urlhaus        import URLhausConnector
 from app.connectors.feodotracker   import FeodoTrackerConnector
-from app.connectors.otx            import OTXConnector
 from app.connectors.ripestat       import RIPEstatConnector
+from app.connectors.urlquery        import URLQueryConnector
 from app.connectors.hashlookup     import HashlookupConnector, PassiveDNSConnector
 
 router    = APIRouter()
@@ -68,10 +68,10 @@ def build_connectors() -> list:
         ThreatFoxConnector(    api_key=None),
         URLhausConnector(      api_key=None),
         FeodoTrackerConnector( api_key=None),
-        OTXConnector(          pick_key(s.otx_key_1, s.otx_key_2)),
         RIPEstatConnector(     api_key=None),
         HashlookupConnector(   api_key=None),
         PassiveDNSConnector(   api_key=None),
+        URLQueryConnector(     api_key=s.urlquery_key),
     ]
     return connectors
 

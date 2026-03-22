@@ -20,6 +20,8 @@ services:
         value: "/tmp/eod.db"
       - key: LOG_PATH
         value: "/tmp/eod.log"
+      - key: URLQUERY_KEY
+        sync: false
       - key: VT_KEY_1
         sync: false
       - key: VT_KEY_2

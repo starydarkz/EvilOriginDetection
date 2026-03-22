@@ -128,6 +128,8 @@ class NormalizedResult:
         "rir",                  # str   — ARIN/RIPE/APNIC/LACNIC/AFRINIC
         "known_file",           # bool  — is hash a known good/bad file
         "known_file_name",      # str   — canonical filename from hashlookup
+        "link_domains",         # list  — external domains loaded (URLScan/urlquery)
+        "credential_leaks",     # list  — [{type, token, chat_id, url}] Telegram/Discord
 
         # ── internal ──────────────────────────────────────────────
         "raw",                  # full original API response dict

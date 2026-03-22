@@ -29,6 +29,46 @@ SUBMIT = "https://urlscan.io/api/v1/scan/"
 RESULT = "https://urlscan.io/api/v1/result"
 
 
+import re as _cred_re
+
+def _scan_credentials(text: str, ioc_value: str = "") -> list[dict]:
+    """Scan page source for Telegram bot tokens and Discord webhooks."""
+    if not text:
+        return []
+    leaks = []
+
+    # Telegram bot token: {bot_id}:{35+ char token}
+    for tok in _cred_re.findall(
+        r'(?:bot|token)[=: \'"]+([0-9]{8,12}:[A-Za-z0-9_\-]{35,})',
+        text, _cred_re.IGNORECASE
+    )[:5]:
+        chat_ids = _cred_re.findall(
+            r'chat[_\-]?id[=: \'"]+(-?[0-9]{6,15})', text, _cred_re.IGNORECASE
+        )
+        leaks.append({
+            "type":       "telegram_bot_token",
+            "token":      tok[:8] + "…" + tok[-6:],
+            "token_full": tok,
+            "chat_id":    chat_ids[0] if chat_ids else None,
+            "url":        f"https://api.telegram.org/bot{tok}/getMe",
+        })
+
+    # Discord webhook URL
+    for wh in _cred_re.findall(
+        r"(https://(?:ptb\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_\-]+)",
+        text
+    )[:5]:
+        leaks.append({
+            "type":       "discord_webhook",
+            "token":      wh.split("/")[-1][:12] + "…",
+            "token_full": wh,
+            "chat_id":    None,
+            "url":        wh,
+        })
+
+    return leaks
+
+
 class URLScanConnector(BaseConnector):
     SOURCE_NAME     = "urlscan"
     SUPPORTED_TYPES = {IOCType.url, IOCType.domain}
@@ -331,15 +371,25 @@ class URLScanConnector(BaseConnector):
         result.verdict_hint = "malicious" if malicious else "unknown"
 
         # ── Lists → graph enrichment ──────────────────────────────
+        link_doms = [d for d in (d_lists.get("linkDomains") or [])[:12]
+                     if d and d != ioc.value]
         raw["_lists"] = {
             "ips":         (d_lists.get("ips")         or [])[:10],
             "domains":     [d for d in (d_lists.get("domains")     or [])[:10]
                             if d and d != ioc.value],
             "hashes":      (d_lists.get("hashes")      or [])[:5],
             "urls":        (d_lists.get("urls")         or [])[:5],
-            "linkDomains": [d for d in (d_lists.get("linkDomains") or [])[:8]
-                            if d and d != ioc.value],
+            "linkDomains": link_doms,
         }
+        if link_doms:
+            result.link_domains = link_doms
+
+        # ── Credential leak scan in JS (best-effort) ───────────────
+        # Scan scripts and inline code captured in the scan
+        result.credential_leaks = _scan_credentials(
+            raw.get("_page_html", "") or "",
+            ioc.value
+        )
 
         # ── Reports for timeline ───────────────────────────────────
         result.reports = []

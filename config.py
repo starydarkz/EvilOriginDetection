@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     securitytrails_key_2: Optional[str] = None
 
     # ── StopForumSpam — no key required ──────────────────────────────
+    urlquery_key:         Optional[str] = None
     stopforumspam_key_1: Optional[str] = None
     stopforumspam_key_2: Optional[str] = None
 
@@ -74,8 +75,6 @@ class Settings(BaseSettings):
 
     # AlienVault OTX — optional key for higher rate limits
     # Free registration at: https://otx.alienvault.com/
-    otx_key_1: Optional[str] = None
-    otx_key_2: Optional[str] = None
 
 
 @lru_cache

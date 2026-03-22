@@ -279,7 +279,6 @@ async def _results_page_inner(
     tf  = sources.get("threatfox",       {})
     uh  = sources.get("urlhaus",         {})
     fd  = sources.get("feodotracker",    {})
-    otx = sources.get("otx",            {})
     ripe= sources.get("ripestat",        {})
     hl  = sources.get("hashlookup",      {})
     dns = sources.get("passivedns",      {})
@@ -364,6 +363,7 @@ async def _results_page_inner(
         "expiry_date":    first(pd.get("expiry_date"),   st.get("expiry_date")),
         "dns_records":    first(pd.get("dns_records"),   st.get("dns_records"), {}),
         "screenshot_url": first(us.get("screenshot_url"), pd.get("screenshot_url")),
+        "link_domains":   us.get("link_domains") or [],
         "http_status":    _to_int(first(us.get("http_status"),   pd.get("http_status"))),
         "http_title":     first(us.get("http_title"),    pd.get("http_title")),
         "technologies":   merged_techs,
@@ -401,9 +401,7 @@ async def _results_page_inner(
         "threat_type":       first(tf.get("threat_type"),  uh.get("threat_type"),
                                    fd.get("threat_type"),  otx.get("threat_type")),
         "threat_actor":      first(otx.get("threat_actor"), tf.get("threat_actor")),
-        "attack_techniques": otx.get("attack_techniques") or [],
-        "related_iocs":      (tf.get("related_iocs") or otx.get("related_iocs") or
-                              uh.get("related_iocs") or [])[:8],
+        "related_iocs":      (tf.get("related_iocs") or uh.get("related_iocs") or [])[:8],
         # Botnet C2 context (Feodo Tracker)
         "is_botnet_c2":      ok("feodotracker") and fd.get("verdict_hint") == "malicious",
         "botnet_family":     fd.get("malware_family"),
@@ -820,13 +818,13 @@ async def _graph_data_inner(ioc_id: int, db):
                     nid = f"us_hash_{fhash[:12]}"
                     if add_node(nid, fhash[:20] + "…", "hash",
                                 source="urlscan",
-                                reason="File hash loaded during scan (URLScan)"):
+                                reason="File hash loaded during scan (URLScan)",
+                                file_name=None):
                         add_edge(central_id, nid, "loads", "threat",
                                  source_intel="urlscan")
 
-
-            # ── ThreatFox / OTX / URLhaus — related IOCs ─────────
-            if src in ("threatfox", "otx", "urlhaus"):
+        # ── ThreatFox / URLhaus — related IOCs ────────────────────
+        if src in ("threatfox", "urlhaus"):
                 for rel in (raw.get("related_iocs") or [])[:6]:
                     if not isinstance(rel, dict):
                         continue
@@ -1068,6 +1066,24 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
             return f"https://search.criminalip.io/asset/search?query={q}"
         case "stopforumspam":
             return f"https://www.stopforumspam.com/search?q={quote(value, safe='')}"
+        case "whatsmyname":
+            return f"https://whatsmyname.app/"
+        case "threatfox":
+            return f"https://threatfox.abuse.ch/browse/?q={quote(value, safe='')}"
+        case "urlhaus":
+            return f"https://urlhaus.abuse.ch/browse/?q={quote(value, safe='')}"
+        case "feodotracker":
+            return f"https://feodotracker.abuse.ch/browse/"
+        case "ripestat":
+            if ioc_type == "ip":
+                return f"https://stat.ripe.net/widget/prefix-overview#w.resource={value}"
+            return f"https://stat.ripe.net/"
+        case "hashlookup":
+            return f"https://hashlookup.circl.lu/lookup/sha256/{value}"
+        case "passivedns":
+            return f"https://api.mnemonic.no/pdns/v3/{quote(value, safe='')}"
+        case "urlquery":
+            return f"https://urlquery.net/search?q={quote(value, safe='')}"
         case _:
             return None
 
@@ -1428,7 +1444,6 @@ async def _results_page_inner(
     tf  = sources.get("threatfox",       {})
     uh  = sources.get("urlhaus",         {})
     fd  = sources.get("feodotracker",    {})
-    otx = sources.get("otx",            {})
     ripe= sources.get("ripestat",        {})
     hl  = sources.get("hashlookup",      {})
     dns = sources.get("passivedns",      {})
@@ -1514,6 +1529,7 @@ async def _results_page_inner(
         "expiry_date":    first(pd.get("expiry_date"),   st.get("expiry_date")),
         "dns_records":    first(pd.get("dns_records"),   st.get("dns_records"), {}),
         "screenshot_url": first(us.get("screenshot_url"), pd.get("screenshot_url")),
+        "link_domains":   us.get("link_domains") or [],
         "http_status":    _to_int(first(us.get("http_status"),   pd.get("http_status"))),
         "http_title":     first(us.get("http_title"),    pd.get("http_title")),
         "technologies":   merged_techs,
@@ -1546,6 +1562,8 @@ async def _results_page_inner(
         "mb_ok":             ok("malwarebazaar"),
         "connected_domains": cip.get("connected_domains") or [],
         "cip_vuln_ports":    cip.get("vuln_ports") or {},
+        # ── Credential leaks (from URLScan + urlquery) ──────────
+        "credential_leaks":  (us.get("credential_leaks") or []),
     }
 
     return templates.TemplateResponse("results.html", {
@@ -1884,13 +1902,13 @@ async def _graph_data_inner(ioc_id: int, db):
                     nid = f"us_hash_{fhash[:12]}"
                     if add_node(nid, fhash[:20] + "…", "hash",
                                 source="urlscan",
-                                reason="File hash loaded during scan (URLScan)"):
+                                reason="File hash loaded during scan (URLScan)",
+                                file_name=None):
                         add_edge(central_id, nid, "loads", "threat",
                                  source_intel="urlscan")
 
-
-            # ── ThreatFox / OTX / URLhaus — related IOCs ─────────
-            if src in ("threatfox", "otx", "urlhaus"):
+        # ── ThreatFox / URLhaus — related IOCs ────────────────────
+        if src in ("threatfox", "urlhaus"):
                 for rel in (raw.get("related_iocs") or [])[:6]:
                     if not isinstance(rel, dict):
                         continue
@@ -2132,6 +2150,24 @@ def _source_link(source: str, value: str, ioc_type: str = "") -> str | None:
             return f"https://search.criminalip.io/asset/search?query={q}"
         case "stopforumspam":
             return f"https://www.stopforumspam.com/search?q={quote(value, safe='')}"
+        case "whatsmyname":
+            return f"https://whatsmyname.app/"
+        case "threatfox":
+            return f"https://threatfox.abuse.ch/browse/?q={quote(value, safe='')}"
+        case "urlhaus":
+            return f"https://urlhaus.abuse.ch/browse/?q={quote(value, safe='')}"
+        case "feodotracker":
+            return f"https://feodotracker.abuse.ch/browse/"
+        case "ripestat":
+            if ioc_type == "ip":
+                return f"https://stat.ripe.net/widget/prefix-overview#w.resource={value}"
+            return f"https://stat.ripe.net/"
+        case "hashlookup":
+            return f"https://hashlookup.circl.lu/lookup/sha256/{value}"
+        case "passivedns":
+            return f"https://api.mnemonic.no/pdns/v3/{quote(value, safe='')}"
+        case "urlquery":
+            return f"https://urlquery.net/search?q={quote(value, safe='')}"
         case _:
             return None
 

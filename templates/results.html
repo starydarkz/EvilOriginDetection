@@ -6,17 +6,22 @@
 /* ── Results page layout ─────────────────────────────── */
 .results-layout {
   display: grid;
-  grid-template-columns: 1fr 258px 480px;
+  grid-template-columns: 1fr 480px 258px;
   gap: 18px;
   align-items: start;
 }
 .results-main  { display:flex; flex-direction:column; gap:18px; }
-.results-side  { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; }
-.results-graph { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; }
+.results-side  { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; grid-column:3; }
+.results-graph { display:flex; flex-direction:column; gap:18px; position:sticky; top:70px; grid-column:2; }
 
 @media (max-width:1100px) {
-  .results-layout { grid-template-columns:1fr 300px; }
-  .results-graph  { grid-column:1/-1; position:static; }
+  .results-layout { grid-template-columns:1fr 1fr; }
+  .results-graph  { grid-column:1/3; position:static; }
+  .results-side   { grid-column:1/3; position:static; }
+}
+@media (max-width:700px) {
+  .results-layout { grid-template-columns:1fr; }
+  .results-side, .results-graph { grid-column:1; position:static; }
 }
 @media (max-width:700px) {
   .results-layout { grid-template-columns:1fr; }
@@ -509,8 +514,7 @@
         {# Threat Intel tab — shows when any threat source has data #}
         {% set _has_threat_data = (
           sources.get('threatfox',{}).get('status') == 'ok' or
-          sources.get('otx',{}).get('status') == 'ok' or
-          sources.get('feodotracker',{}).get('status') == 'ok' or
+            sources.get('feodotracker',{}).get('status') == 'ok' or
           sources.get('urlhaus',{}).get('status') == 'ok' or
           sources.get('hashlookup',{}).get('status') == 'ok'
         ) %}
@@ -963,10 +967,11 @@
       {# ══ TAB: THREAT INTEL ══ #}
       {% set _has_threat_data = (
         sources.get('threatfox',{}).get('status') == 'ok' or
-        sources.get('otx',{}).get('status') == 'ok' or
         sources.get('feodotracker',{}).get('status') == 'ok' or
         sources.get('urlhaus',{}).get('status') == 'ok' or
-        sources.get('hashlookup',{}).get('status') == 'ok'
+        sources.get('hashlookup',{}).get('status') == 'ok' or
+        (sources.get('urlquery',{}).get('status') == 'ok' and
+         sources.get('urlquery',{}).get('verdict_hint') in ('malicious','suspicious'))
       ) %}
       {% if _has_threat_data %}
       <div class="tab-panel" id="tab-threat">
@@ -1029,44 +1034,6 @@
         </div>
         {% endif %}
 
-        {# AlienVault OTX #}
-        {% set _otx = sources.get('otx',{}) %}
-        {% if _otx.get('status') == 'ok' %}
-        <div style="margin-bottom:14px">
-          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
-                      text-transform:uppercase;color:var(--text3);margin-bottom:8px">AlienVault OTX — Open Threat Exchange</div>
-          <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:8px">
-            <div>
-              <div style="font-size:24px;font-weight:800;font-family:'Outfit',sans-serif;color:var(--v-{{ _otx.get('verdict_hint') or 'unknown' }})">{{ _otx.get('pulse_count') or 0 }}</div>
-              <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase">Threat Pulse{{ 's' if (_otx.get('pulse_count') or 0) != 1 else '' }}</div>
-              <div style="font-size:10px;color:var(--text3);margin-top:2px;max-width:180px">A pulse is a community-reported collection of IOCs tied to a specific threat, campaign or actor.</div>
-            </div>
-            {% if _otx.get('threat_actor') %}
-            <div>
-              <div style="font-size:14px;font-weight:700;color:var(--text)">{{ _otx.get('threat_actor') }}</div>
-              <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase">Attributed Adversary</div>
-            </div>
-            {% endif %}
-            {% if _otx.get('malware_family') %}
-            <div>
-              <div style="font-size:14px;font-weight:700;color:var(--v-malicious)">{{ _otx.get('malware_family') }}</div>
-              <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase">Malware Family</div>
-            </div>
-            {% endif %}
-          </div>
-          {% if unified.attack_techniques %}
-          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">MITRE ATT&amp;CK Techniques</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap">
-            {% for tech in unified.attack_techniques[:10] %}
-            <a href="https://attack.mitre.org/techniques/{{ tech.split('.')[0] }}/" target="_blank" rel="noopener"
-               style="font-family:'Space Mono',monospace;font-size:10px;background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:4px;color:var(--teal);text-decoration:none">{{ tech }}</a>
-            {% endfor %}
-          </div>
-          {% endif %}
-        </div>
-        {% endif %}
-
-        {# CIRCL hashlookup #}
         {% set _hl = sources.get('hashlookup',{}) %}
         {% if _hl.get('status') == 'ok' and _hl.get('known_file') %}
         <div style="padding:10px 12px;border-radius:8px;
@@ -1081,8 +1048,27 @@
         </div>
         {% endif %}
 
+        {# urlquery.net #}
+        {% set _uq = sources.get('urlquery',{}) %}
+        {% if _uq.get('status') == 'ok' and _uq.get('verdict_hint') in ('malicious','suspicious') %}
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">urlquery.net — URL Reputation & IDS</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px">
+            <span style="font-size:14px;font-weight:700;color:var(--v-{{ _uq.get('verdict_hint') or 'unknown' }})">{{ _uq.get('verdict_hint','').capitalize() }}</span>
+            {% if _uq.get('tags') %}{% for t in _uq.get('tags')[:4] %}<span style="font-size:10px;padding:1px 7px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text2)">{{ t }}</span>{% endfor %}{% endif %}
+          </div>
+          {% set _uq_reports = _uq.get('reports') or [] %}
+          {% for rep in _uq_reports[:4] %}
+          {% if rep.get('summary') and 'IDS:' in rep.get('summary','') %}
+          <div style="font-size:11px;color:var(--v-malicious);font-family:'Space Mono',monospace;margin-bottom:2px">{{ rep.get('summary') }}</div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+
         {% if not ((_fd.get('verdict_hint')=='malicious') or (_tf.get('verdict_hint')=='malicious') or
-                   (_uh.get('verdict_hint')=='malicious') or ((_otx.get('pulse_count') or 0)>0) or _hl.get('known_file')) %}
+                   (_uh.get('verdict_hint')=='malicious') or _hl.get('known_file') or
+                   (_uq.get('verdict_hint') in ('malicious','suspicious'))) %}
         <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0">
           Sources queried — no threat intelligence matches found for this indicator.
         </div>
@@ -1182,11 +1168,40 @@
           </div>
         </div>
         {% endif %}
-        {% if _us.get('link_domains') %}
+        {# ── Credential leaks (Telegram / Discord) ────────────── #}
+        {% set _all_leaks = (unified.credential_leaks or []) + (sources.get('urlquery',{}).get('credential_leaks') or []) %}
+        {% if _all_leaks %}
+        <div style="margin-bottom:16px;padding:10px 12px;border-radius:8px;background:rgba(255,85,85,0.08);border:1px solid rgba(255,85,85,0.25)">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--v-malicious);margin-bottom:10px">
+            ⚠ Credential Exposures Detected in Page Source
+          </div>
+          {% for leak in _all_leaks[:8] %}
+          <div style="margin-bottom:8px;padding:8px 10px;background:var(--bg3);border-radius:6px;border-left:3px solid var(--v-malicious)">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+              <span style="font-size:10px;padding:1px 6px;background:rgba(255,85,85,0.2);border-radius:3px;color:var(--v-malicious);font-family:'Space Mono',monospace;text-transform:uppercase;font-weight:700">
+                {{ leak.type.replace('_',' ') if leak.type else '' }}</span>
+              {% if leak.chat_id %}
+              <span style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace">
+                chat_id: <span style="color:var(--text2)">{{ leak.chat_id }}</span></span>
+              {% endif %}
+              {% if leak.url %}
+              <a href="{{ leak.url }}" target="_blank" rel="noopener"
+                 style="margin-left:auto;font-size:10px;color:var(--teal);text-decoration:none;font-family:'Space Mono',monospace;border:1px solid rgba(68,221,187,0.3);padding:2px 6px;border-radius:3px">
+                Verify ↗</a>
+              {% endif %}
+            </div>
+            <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text2);overflow-wrap:break-word;word-break:break-all">
+              token: {{ leak.token if leak.token else '—' }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if unified.link_domains or _us.get('link_domains') %}
         <div>
-          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">External Domains Loaded ({{ _us.get('link_domains')|length }})</div>
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">External Domains Loaded ({{ (unified.link_domains or _us.get('link_domains') or [])|length }})</div>
           <div style="display:flex;flex-wrap:wrap;gap:5px">
-            {% for dom in _us.get('link_domains')[:12] %}<span style="font-size:11px;padding:2px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:'Space Mono',monospace">{{ dom }}</span>{% endfor %}
+            {% for dom in (unified.link_domains or _us.get('link_domains') or [])[:12] %}<span style="font-size:11px;padding:2px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:'Space Mono',monospace">{{ dom }}</span>{% endfor %}
           </div>
         </div>
         {% endif %}
@@ -1218,10 +1233,10 @@
         ('threatfox',     'ThreatFox'),
         ('urlhaus',       'URLhaus'),
         ('feodotracker',  'Feodo Tracker'),
-        ('otx',           'AlienVault OTX'),
         ('ripestat',      'RIPEstat'),
         ('hashlookup',    'CIRCL hashlookup'),
         ('passivedns',    'Passive DNS'),
+        ('urlquery',      'urlquery.net'),
       ] %}
       {% for src_key, src_label in source_meta %}
         {% set src    = sources.get(src_key, {}) %}
