@@ -1,7 +1,7 @@
 """
 urlquery.py — urlquery.net connector for Evil Origin Detection.
 
-API: https://urlquery.net/doc/api/public/v1
+API: https://api.urlquery.net/public/v1
 Key required via URLQUERY_KEY env variable.
 
 Endpoints used:
@@ -20,7 +20,7 @@ from typing import ClassVar, Optional
 from app.connectors.base import BaseConnector, IOCType, NormalizedResult
 
 
-BASE    = "https://urlquery.net"
+BASE    = "https://api.urlquery.net"
 API     = f"{BASE}/api/v1/public"
 
 _SUPPORTED = {IOCType.domain, IOCType.url, IOCType.ip}
@@ -40,7 +40,7 @@ class URLQueryConnector(BaseConnector):
         import httpx
 
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "X-APIKEY": self.api_key,
             "Accept":        "application/json",
             "User-Agent":    "Mozilla/5.0 (compatible; EOD/1.0; threat intelligence)",
         }
@@ -67,10 +67,30 @@ class URLQueryConnector(BaseConnector):
                     pass
                 if rep.status_code == 200:
                     result["_reputation"] = rep.json()
-                elif rep.status_code in (401, 403):
-                    result["_blocked"] = True
-                    result["_status"]  = rep.status_code
-                    return result
+                elif rep.status_code in (401, 403, 404):
+                    # 404 often means wrong endpoint or key required
+                    # Try again with key as query parameter
+                    try:
+                        rep2 = await c.get(
+                            f"{BASE}/public/v1/reputation/check/",
+                            params={"query": query_val, "apikey": self.api_key},
+                            headers={"Accept": "application/json"},
+                        )
+                        from app.logger import app_logger
+                        app_logger.warning(
+                            f"[urlquery] retry with apikey param: "
+                            f"status={rep2.status_code} body={rep2.text[:100]!r}"
+                        )
+                        if rep2.status_code == 200:
+                            result["_reputation"] = rep2.json()
+                        else:
+                            result["_blocked"] = True
+                            result["_status"]  = rep.status_code
+                            return result
+                    except Exception as _e2:
+                        result["_blocked"] = True
+                        result["_status"]  = rep.status_code
+                        return result
             except Exception as e:
                 result["_rep_error"] = str(e)
 

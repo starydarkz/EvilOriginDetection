@@ -104,19 +104,38 @@ class URLScanConnector(BaseConnector):
                 pass
             r = await c.get(
                 SEARCH,
-                params={"q": query, "size": "1", "sort": "date:desc"},
+                params={"q": query, "size": "3", "sort": "date:desc"},
                 headers=headers,
             )
 
             if r.status_code in (400, 403):
+                try:
+                    from app.logger import app_logger
+                    app_logger.warning(f"[urlscan] search BLOCKED status={r.status_code} body={r.text[:200]!r}")
+                except Exception: pass
                 return {"results": [], "_status": r.status_code, "_debug": f"search {r.status_code}"}
             if r.status_code == 429:
                 raise Exception("URLScan rate limit exceeded")
             if r.status_code != 200:
+                try:
+                    from app.logger import app_logger
+                    app_logger.warning(f"[urlscan] search ERROR status={r.status_code} body={r.text[:200]!r}")
+                except Exception: pass
                 return {"results": [], "_debug": f"search HTTP {r.status_code}"}
 
             data    = r.json()
             results = data.get("results", [])
+            # ALWAYS log - even 0 results is important to know
+            try:
+                from app.logger import app_logger
+                app_logger.warning(
+                    f"[urlscan] RESULT: query={query!r} "
+                    f"status=200 total={data.get('total',0)} "
+                    f"results={len(results)} "
+                    f"first_url={(results[0].get('page',{}).get('url','') if results else 'NONE')!r}"
+                )
+            except Exception as _le:
+                pass
             data["_debug_search"] = {
                 "total": data.get("total", 0),
                 "results_count": len(results),
@@ -125,16 +144,23 @@ class URLScanConnector(BaseConnector):
             }
             try:
                 from app.logger import app_logger
-                first_url = (results[0].get("page",{}).get("url","") or results[0].get("task",{}).get("url","")) if results else "no results"
-                app_logger.info(
+                first_url  = results[0].get("page",{}).get("url","") if results else ""
+                first_stat = results[0].get("page",{}).get("status","") if results else ""
+                first_uuid = results[0].get("task",{}).get("uuid","") if results else ""
+                app_logger.warning(
                     f"[urlscan] query={query!r} → "
-                    f"total={data.get('total',0)} hits, "
-                    f"first_url={first_url!r}, "
-                    f"http_status={results[0].get('page',{}).get('status') if results else 'N/A'}, "
-                    f"uuid={data['_debug_search']['first_uuid']!r}"
+                    f"total={data.get('total',0)} hits "
+                    f"status={r.status_code} "
+                    f"first_url={first_url!r} "
+                    f"http={first_stat!r} "
+                    f"uuid={first_uuid!r}"
                 )
-            except Exception:
-                pass
+            except Exception as _log_e:
+                try:
+                    from app.logger import app_logger
+                    app_logger.warning(f"[urlscan] result log error: {_log_e} | raw={str(data)[:200]}")
+                except Exception:
+                    pass
 
             # ── Step 2: Submit new scan if nothing found ───────────
             if not results and self.api_key:
