@@ -51,7 +51,23 @@ class SecurityTrailsConnector(BaseConnector):
 
     def _normalize_domain(self, raw: dict, result: NormalizedResult) -> None:
         # ── DNS records ───────────────────────────────────────────
-        records = raw.get("current_dns", {}) or {}
+        records_raw = raw.get("current_dns", {}) or {}
+        # Normalize all record types to {"values": [...]} for consistent template rendering
+        records = {}
+        for rtype, rdata in records_raw.items():
+            if isinstance(rdata, dict):
+                vals = rdata.get("values") or rdata.get("records") or []
+                if not vals:
+                    # Flatten remaining scalar fields (e.g. soa.rname, soa.email)
+                    scalars = [v for k, v in rdata.items()
+                               if isinstance(v, str) and k not in ("type", "ttl")]
+                    if scalars:
+                        vals = [{"value": s} for s in scalars]
+                records[rtype.upper()] = {"values": vals[:10]}
+            elif isinstance(rdata, list):
+                records[rtype.upper()] = {"values": rdata[:10]}
+            elif isinstance(rdata, str):
+                records[rtype.upper()] = {"values": [{"value": rdata}]}
         result.dns_records = records
 
         # IPs currently resolving to this domain

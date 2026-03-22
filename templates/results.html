@@ -261,6 +261,106 @@
       {% endif %}
     </div>
 
+    {# ── SECTION 2a: WEB INTELLIGENCE (domain/url only) ── #}
+    {% if ioc.type.value in ['domain','url'] %}
+    {% set has_web_data = unified.http_status or unified.http_title or unified.technologies or unified.screenshot_url or unified.redirects %}
+    {% if has_web_data %}
+    <div class="section-card anim-fade-up anim-delay-2">
+      <div class="section-card-title">🌐 Web Intelligence</div>
+
+      {# Status + title row #}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        {% if unified.http_status %}
+        <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
+          HTTP {{ unified.http_status }}
+        </span>
+        {% endif %}
+        {% if unified.http_title %}
+        <span style="font-size:14px;font-weight:600;color:var(--text)">"{{ unified.http_title[:50] }}"</span>
+        {% endif %}
+        {% if source_links.get('urlscan') and source_links.get('urlscan') != '#' %}
+        <a href="{{ source_links.get('urlscan') }}" target="_blank" rel="noopener"
+           style="margin-left:auto;font-size:11px;color:var(--teal);
+                  font-family:'Space Mono',monospace;text-decoration:none">
+          URLScan report ↗
+        </a>
+        {% endif %}
+      </div>
+
+      {# Screenshot thumbnail #}
+      {% if unified.screenshot_url %}
+      <div style="margin-bottom:12px;border-radius:8px;overflow:hidden;
+                  border:1px solid var(--border);position:relative;background:var(--bg3)">
+        <div id="ss-thumb-loading" style="height:140px;display:flex;align-items:center;
+             justify-content:center;color:var(--text3);font-size:11px">
+          <span style="animation:spin 1.4s linear infinite;font-size:18px;opacity:0.3">◌</span>
+        </div>
+        <img id="ss-thumb-img"
+             src="{{ unified.screenshot_url }}"
+             referrerpolicy="no-referrer"
+             alt="Screenshot"
+             style="width:100%;display:none;cursor:pointer"
+             onclick="switchTab('tab-screenshot',document.querySelector('[onclick*=tab-screenshot]'))"
+             onload="this.style.display='block';document.getElementById('ss-thumb-loading').style.display='none'"
+             onerror="ssThumbFail(this)">
+        <div id="ss-thumb-fallback" style="display:none;height:80px;align-items:center;
+             justify-content:center;gap:8px;flex-direction:column">
+          <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
+             style="font-size:11px;color:var(--teal);font-family:'Space Mono',monospace">
+            View screenshot ↗
+          </a>
+        </div>
+      </div>
+      <script>
+      window.ssThumbFail = function(img) {
+        // Try proxy as fallback
+        if (!img.src.includes('/proxy/')) {
+          img.onerror = function() {
+            document.getElementById('ss-thumb-loading').style.display = 'none';
+            document.getElementById('ss-thumb-fallback').style.display = 'flex';
+            img.style.display = 'none';
+          };
+          img.src = '/proxy/screenshot?url=' + encodeURIComponent('{{ unified.screenshot_url }}');
+        }
+      };
+      </script>
+      {% endif %}
+
+      {# Tech stack #}
+      {% if unified.technologies %}
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Technologies</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          {% for tech in unified.technologies[:12] %}
+          <span style="font-size:11px;padding:2px 9px;background:var(--bg3);
+                       border-radius:4px;border:1px solid var(--border2);color:var(--text2)">
+            {{ tech }}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# Redirect chain #}
+      {% if unified.redirects %}
+      <div>
+        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
+                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Redirects</div>
+        <div style="font-size:11px;font-family:'Space Mono',monospace;
+                    color:var(--text3);line-height:2;overflow-wrap:break-word">
+          {% for r in unified.redirects[:5] %}
+          <span style="color:var(--text2)">{{ r[:70] }}{% if r|length > 70 %}…{% endif %}</span>
+          {% if not loop.last %}<span style="color:var(--accent)"> → </span>{% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+    {% endif %}
+    {% endif %}
+
     {# ── SECTION 2b: THREAT INTELLIGENCE ── #}
     {% set has_tf  = sources.get('threatfox',{}).get('status') == 'ok' and sources.get('threatfox',{}).get('verdict_hint') == 'malicious' %}
     {% set has_uh  = sources.get('urlhaus',{}).get('status') == 'ok' and sources.get('urlhaus',{}).get('verdict_hint') == 'malicious' %}
@@ -673,17 +773,30 @@
                       text-transform:uppercase;color:var(--text3);margin-bottom:6px">
             {{ record_type }} Records
           </div>
+          {# All records now normalized to {values:[...]} format #}
           {% if records is mapping %}
-            {% set rec_list = (records.get('values') or [])[:8] %}
+            {% set rec_list = (records.get('values') or [])[:10] %}
+          {% elif records is string %}
+            {% set rec_list = [{'value': records}] %}
           {% else %}
-            {% set rec_list = (records or [])[:8] %}
+            {% set rec_list = (records or [])[:10] %}
           {% endif %}
           {% for rec in rec_list %}
+          {% set display = "" %}
+          {% if rec is mapping %}
+            {% set display = rec.get('ip') or rec.get('value') or rec.get('address') or rec.get('host') or rec.get('hostname') or (rec | string) %}
+          {% elif rec is string %}
+            {% set display = rec %}
+          {% else %}
+            {% set display = rec | string %}
+          {% endif %}
+          {% if display and display != '{}' %}
           <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--text);
-                      padding:4px 10px;background:var(--bg3);border-radius:5px;margin-bottom:3px">
-            {% if rec is mapping %}{{ rec.get('ip') or rec.get('value') or rec.get('address') or rec | string }}
-            {% else %}{{ rec | string }}{% endif %}
+                      padding:4px 10px;background:var(--bg3);border-radius:5px;margin-bottom:3px;
+                      word-break:break-all">
+            {{ display }}
           </div>
+          {% endif %}
           {% endfor %}
         </div>
         {% endfor %}
@@ -693,64 +806,122 @@
       </div>
       {% endif %}
 
-      {# TAB: SCREENSHOT #}
+      {# TAB: SCREENSHOT + WEB INTELLIGENCE #}
       {% if ioc.type.value in ['domain','url'] %}
       <div class="tab-panel" id="tab-screenshot">
+
+        {# ── Web meta bar ── #}
+        {% if unified.http_status or unified.http_title or unified.technologies or unified.redirects %}
+        <div style="margin-bottom:14px;padding:10px 12px;background:var(--bg3);
+                    border-radius:8px;border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            {% if unified.http_status %}
+            <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
+              HTTP {{ unified.http_status }}
+            </span>
+            {% endif %}
+            {% if unified.http_title %}
+            <span style="font-size:13px;color:var(--text);font-weight:500">"{{ unified.http_title[:60] }}"</span>
+            {% endif %}
+            {% if source_links.get('urlscan') and source_links.get('urlscan') != '#' %}
+            <a href="{{ source_links.get('urlscan') }}" target="_blank" rel="noopener"
+               style="margin-left:auto;font-size:11px;color:var(--teal);
+                      font-family:'Space Mono',monospace;text-decoration:none">
+              Full scan ↗
+            </a>
+            {% endif %}
+          </div>
+          {% if unified.technologies %}
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:{% if unified.redirects %}8px{% else %}0{% endif %}">
+            {% for tech in unified.technologies[:12] %}
+            <span style="font-size:11px;padding:2px 8px;background:var(--bg2);
+                         border-radius:4px;border:1px solid var(--border2);color:var(--text2)">
+              {{ tech }}
+            </span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if unified.redirects %}
+          <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;
+                      line-height:1.8;overflow-wrap:break-word">
+            {% for r in unified.redirects[:5] %}
+            <span style="color:var(--text2)">{{ r[:80] }}</span>
+            {% if not loop.last %}<span style="color:var(--accent)"> ⟶ </span>{% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {# ── Screenshot — multi-strategy loading ── #}
         {% if unified.screenshot_url %}
-        <div class="screenshot-frame" style="position:relative">
+        <div class="screenshot-frame" style="position:relative;background:var(--bg3);border-radius:10px;overflow:hidden">
+          {# Loading spinner #}
           <div id="ss-loading" style="display:flex;align-items:center;justify-content:center;
-               height:200px;background:var(--bg3);border-radius:10px;color:var(--text3);
-               font-size:12px;gap:8px;flex-direction:column">
-            <span style="font-size:20px;opacity:0.3;animation:spin 1.2s linear infinite">◌</span>
-            <span>Loading screenshot...</span>
+               height:220px;color:var(--text3);font-size:12px;gap:8px;flex-direction:column">
+            <span style="font-size:22px;opacity:0.25;animation:spin 1.4s linear infinite">◌</span>
+            <span style="font-family:'Space Mono',monospace;font-size:10px;
+                         letter-spacing:0.1em;text-transform:uppercase">Loading screenshot</span>
           </div>
-          <img src="/proxy/screenshot?url={{ unified.screenshot_url | urlencode }}"
+          {# Strategy 1: direct from urlscan.io CDN #}
+          <img id="ss-img-direct"
+               src="{{ unified.screenshot_url }}"
                alt="Screenshot of {{ ioc.value }}"
-               style="width:100%;border-radius:10px;display:none"
-               onload="this.style.display='block';document.getElementById('ss-loading').style.display='none'"
-               onerror="document.getElementById('ss-loading').style.display='none';document.getElementById('ss-fallback').style.display='flex'">
+               referrerpolicy="no-referrer"
+               crossorigin="anonymous"
+               style="width:100%;display:none;border-radius:10px"
+               onload="ssLoaded(this)"
+               onerror="ssTryProxy(this)">
+          {# Fallback if both fail #}
           <div id="ss-fallback" style="display:none;align-items:center;justify-content:center;
-               height:120px;color:var(--text3);font-size:13px;flex-direction:column;gap:8px">
-            <span>Screenshot could not load</span>
-            <a href="{{ source_links.get('urlscan','#') }}" target="_blank" rel="noopener"
-               style="font-size:11px;color:var(--blue)">Open scan report ↗</a>
+               height:160px;flex-direction:column;gap:10px">
+            <span style="font-size:12px;color:var(--text3)">Screenshot unavailable</span>
+            <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
+               style="font-size:11px;color:var(--teal);font-family:'Space Mono',monospace">
+              Open directly ↗
+            </a>
           </div>
         </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          {% if unified.http_status %}
-          <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
-            HTTP {{ unified.http_status }}
-          </span>
-          {% endif %}
-          {% if unified.http_title %}
-          <span style="font-size:13px;color:var(--text2)">"{{ unified.http_title[:60] }}"</span>
-          {% endif %}
-          <a href="{{ source_links.get('urlscan','#') }}" target="_blank" rel="noopener"
-             style="margin-left:auto;font-size:12px;color:var(--text3)">View full scan ↗</a>
-        </div>
-        {% if unified.technologies %}
-        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px">
-          {% for tech in unified.technologies[:8] %}
-          <span style="font-size:12px;padding:2px 9px;background:var(--bg3);
-                       border-radius:5px;border:1px solid var(--border);color:var(--text2)">
-            {{ tech }}
-          </span>
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% if unified.redirects %}
-        <div style="margin-top:10px;font-size:12px;color:var(--text3);line-height:1.6">
-          Redirects:
-          {% for r in unified.redirects[:3] %}
-          <span style="font-family:'Space Mono',monospace">{{ r[:70] }}</span>{% if not loop.last %} →{% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
+        <script>
+        (function() {
+          function ssLoaded(img) {
+            document.getElementById('ss-loading').style.display = 'none';
+            img.style.display = 'block';
+          }
+          window.ssLoaded = ssLoaded;
+          window.ssTryProxy = function(img) {
+            // Try server-side proxy as fallback
+            var proxyUrl = '/proxy/screenshot?url=' + encodeURIComponent(img.src.split('?')[0] !== img.src ? img.getAttribute('data-orig') : img.src);
+            if (img.src.includes('/proxy/screenshot')) {
+              // Both failed — show fallback
+              document.getElementById('ss-loading').style.display = 'none';
+              document.getElementById('ss-fallback').style.display = 'flex';
+              return;
+            }
+            var proxyImg = document.createElement('img');
+            proxyImg.style.cssText = 'width:100%;display:none;border-radius:10px';
+            proxyImg.onload = function() { ssLoaded(proxyImg); };
+            proxyImg.onerror = function() {
+              document.getElementById('ss-loading').style.display = 'none';
+              document.getElementById('ss-fallback').style.display = 'flex';
+            };
+            proxyImg.src = '/proxy/screenshot?url=' + encodeURIComponent('{{ unified.screenshot_url }}');
+            img.parentNode.insertBefore(proxyImg, img);
+            img.remove();
+          };
+        })();
+        </script>
         {% else %}
-        <div style="display:flex;align-items:center;justify-content:center;height:100px;
-             color:var(--text3);font-size:13px;flex-direction:column;gap:6px">
-          <span>{% if not unified.urlscan_ok %}URLScan.io key not configured
-                {% else %}No screenshot available{% endif %}</span>
+        <div style="display:flex;align-items:center;justify-content:center;height:120px;
+             color:var(--text3);font-size:13px;flex-direction:column;gap:8px">
+          {% if not unified.urlscan_ok %}
+          <span style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:0.1em;
+                       text-transform:uppercase">URLScan not configured</span>
+          {% else %}
+          <span style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:0.1em;
+                       text-transform:uppercase">No screenshot available</span>
+          <span style="font-size:11px;color:var(--text3)">Try rescanning to generate a fresh URLScan result</span>
+          {% endif %}
         </div>
         {% endif %}
       </div>

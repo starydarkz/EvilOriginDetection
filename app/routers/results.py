@@ -619,22 +619,26 @@ async def _graph_data_inner(ioc_id: int, db):
         if src == "virustotal":
             relations = raw.get("_relations", {})
 
-            # Resolutions: IP↔Domain
-            for item in (relations.get("resolutions") or [])[:6]:
-                attr    = item.get("attributes", {})
-                related = (attr.get("host_name") or attr.get("ip_address")
-                           or item.get("id", ""))
-                if related:
-                    rtype = ("domain"
-                             if "." in related and not related.replace(".", "").isdigit()
-                             else "ip")
-                    nid = f"vt_res_{related}"
-                    if add_node(nid, related, rtype,
+            # Resolutions: IP↔Domain — add each as a SEPARATE typed node
+            for item in (relations.get("resolutions") or [])[:8]:
+                attr      = item.get("attributes", {}) or {}
+                ip_addr   = (attr.get("ip_address") or "").strip()
+                host_name = (attr.get("host_name")  or "").strip()
+                item_id   = (item.get("id") or "").strip()
+                if not ip_addr and not host_name and item_id:
+                    if "." in item_id and not item_id.replace(".", "").isdigit():
+                        host_name = item_id
+                    else:
+                        ip_addr = item_id
+                for val, rtype in [(ip_addr, "ip"), (host_name, "domain")]:
+                    if not val or val == ioc.value:
+                        continue
+                    nid = f"vt_res_{val[:32]}"
+                    if add_node(nid, val, rtype,
                                 source="virustotal",
                                 reason="DNS resolution (VirusTotal)"):
                         add_edge(central_id, nid, "resolves-to", "resolution",
                                  source_intel="virustotal")
-
             # Communicating / dropped hashes
             for rel_key, elabel in [
                 ("communicating_files", "communicates-with"),
@@ -1623,22 +1627,26 @@ async def _graph_data_inner(ioc_id: int, db):
         if src == "virustotal":
             relations = raw.get("_relations", {})
 
-            # Resolutions: IP↔Domain
-            for item in (relations.get("resolutions") or [])[:6]:
-                attr    = item.get("attributes", {})
-                related = (attr.get("host_name") or attr.get("ip_address")
-                           or item.get("id", ""))
-                if related:
-                    rtype = ("domain"
-                             if "." in related and not related.replace(".", "").isdigit()
-                             else "ip")
-                    nid = f"vt_res_{related}"
-                    if add_node(nid, related, rtype,
+            # Resolutions: IP↔Domain — add each as a SEPARATE typed node
+            for item in (relations.get("resolutions") or [])[:8]:
+                attr      = item.get("attributes", {}) or {}
+                ip_addr   = (attr.get("ip_address") or "").strip()
+                host_name = (attr.get("host_name")  or "").strip()
+                item_id   = (item.get("id") or "").strip()
+                if not ip_addr and not host_name and item_id:
+                    if "." in item_id and not item_id.replace(".", "").isdigit():
+                        host_name = item_id
+                    else:
+                        ip_addr = item_id
+                for val, rtype in [(ip_addr, "ip"), (host_name, "domain")]:
+                    if not val or val == ioc.value:
+                        continue
+                    nid = f"vt_res_{val[:32]}"
+                    if add_node(nid, val, rtype,
                                 source="virustotal",
                                 reason="DNS resolution (VirusTotal)"):
                         add_edge(central_id, nid, "resolves-to", "resolution",
                                  source_intel="virustotal")
-
             # Communicating / dropped hashes
             for rel_key, elabel in [
                 ("communicating_files", "communicates-with"),

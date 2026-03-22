@@ -177,9 +177,21 @@ class PulsediveConnector(BaseConnector):
 
         # DNS records
         raw_dns = props.get("dns")
-        dns = raw_dns if isinstance(raw_dns, dict) else {}
-        if dns:
-            result.dns_records = dns
+        dns_raw = raw_dns if isinstance(raw_dns, dict) else {}
+        if dns_raw:
+            # Normalize to consistent {"values":[...]} format
+            dns_norm = {}
+            for rtype, rdata in dns_raw.items():
+                if isinstance(rdata, list):
+                    dns_norm[rtype.upper()] = {"values": [
+                        ({"value": v} if isinstance(v, str) else v)
+                        for v in rdata[:10]
+                    ]}
+                elif isinstance(rdata, str):
+                    dns_norm[rtype.upper()] = {"values": [{"value": rdata}]}
+                elif isinstance(rdata, dict):
+                    dns_norm[rtype.upper()] = {"values": rdata.get("values", [])[:10]}
+            result.dns_records = dns_norm
 
         # WHOIS
         raw_whois = props.get("whois")

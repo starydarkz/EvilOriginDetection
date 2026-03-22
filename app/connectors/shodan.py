@@ -21,11 +21,37 @@ BASE = "https://api.shodan.io"
 
 class ShodanConnector(BaseConnector):
     SOURCE_NAME     = "shodan"
-    SUPPORTED_TYPES = {IOCType.ip}
+    SUPPORTED_TYPES = {IOCType.ip, IOCType.domain}
     DATA_CATEGORIES: ClassVar[set[str]] = {"host_info", "ports"}
 
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         async with self._client() as c:
+            # Domain lookup: get DNS info + IPs, then fetch host data for first IP
+            if ioc.type == IOCType.domain:
+                r = await c.get(
+                    f"{BASE}/dns/domain/{ioc.value}",
+                    params={"key": self.api_key}
+                )
+                if r.status_code == 404:
+                    return {"_not_found": True}
+                if r.status_code == 403:
+                    return {"_access_restricted": True}
+                if r.status_code != 200:
+                    r.raise_for_status()
+                dns_data = r.json()
+                # Get IPs from A records and fetch host data for first IP
+                ips = [sub.get("value") for sub in dns_data.get("data", [])
+                       if sub.get("type") == "A" and sub.get("value")]
+                result = {"_domain_dns": dns_data, "_resolved_ips": ips[:3]}
+                if ips:
+                    r2 = await c.get(
+                        f"{BASE}/shodan/host/{ips[0]}",
+                        params={"key": self.api_key}
+                    )
+                    if r2.status_code == 200:
+                        result["_host_data"] = r2.json()
+                return result
+
             r = await c.get(
                 f"{BASE}/shodan/host/{ioc.value}",
                 params={"key": self.api_key}
@@ -49,6 +75,22 @@ class ShodanConnector(BaseConnector):
             return
         if raw.get("_not_found"):
             result.verdict_hint = "unknown"
+            return
+
+        # ── Domain: use resolved IP host data ────────────────────
+        if raw.get("_domain_dns"):
+            resolved  = raw.get("_resolved_ips") or []
+            host_data = raw.get("_host_data") or {}
+            if host_data:
+                # Process as if it were a direct IP query
+                self.normalize(host_data, ioc, result)
+                # Preserve domain's resolved IPs in hostnames
+                if resolved:
+                    result.hostnames = resolved[:5]
+            else:
+                result.verdict_hint = "unknown"
+                result.hostnames    = resolved[:5]
+                result.dns_records  = {"A": {"values": [{"ip": ip} for ip in resolved]}}
             return
 
         # ── Host info ─────────────────────────────────────────────

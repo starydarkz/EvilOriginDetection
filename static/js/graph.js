@@ -116,9 +116,14 @@
           'border-color':       ele => nodeColor(ele.data()),
           'border-opacity':     0.9,
           'label':              ele => {
-            const lbl = ele.data('label') || '';
-            // Truncate long hashes/values for display
-            if (lbl.length > 22 && !ele.data('central')) {
+            const d   = ele.data();
+            const lbl = d.label || '';
+            // For hash nodes: prefer file_name as display label
+            if (d.type === 'hash' && d.file_name && !d.central) {
+              return d.file_name.length > 20 ? d.file_name.slice(0, 18) + '…' : d.file_name;
+            }
+            // Truncate long hashes/values for canvas display
+            if (lbl.length > 22 && !d.central) {
               return lbl.slice(0, 10) + '…' + lbl.slice(-6);
             }
             return lbl;
