@@ -257,36 +257,14 @@ class URLQueryConnector(BaseConnector):
                         result["_report"] = best_report
                         try:
                             from app.logger import app_logger
-                            sensors  = best_report.get("sensors") or {}
-                            detect   = best_report.get("detection") or {}
-                            app_logger.warning(
+                            sensors = best_report.get("sensors") or {}
+                            arts    = best_report.get("artifacts") or {}
+                            app_logger.info(
                                 f"[urlquery] best report score={best_score} "
-                                f"top_keys={list(best_report.keys())} "
-                                f"sensors_keys={list(sensors.keys())} "
-                                f"detection_keys={list(detect.keys())} "
-                                f"uq_sensor_alerts={len(sensors.get('urlquery') or [])}"
+                                f"uq={len(sensors.get('urlquery') or [])} "
+                                f"telegram_artifacts={len((arts.get('telegram') or []))}"
                             )
-                            # Log ALL keys and values at top level for full discovery
-                            for k, v in best_report.items():
-                                if k not in ('final', 'sensors'):
-                                    app_logger.warning(
-                                        f"[urlquery] report.{k} = {str(v)[:120]!r}"
-                                    )
-                            # Log detection sub-fields
-                            for k, v in detect.items():
-                                app_logger.warning(
-                                    f"[urlquery] detection.{k} = {str(v)[:200]!r}"
-                                )
-                            # Log sensors sub-fields  
-                            for k, v in sensors.items():
-                                app_logger.warning(
-                                    f"[urlquery] sensors.{k} = {str(v)[:200]!r}"
-                                )
-                        except Exception as _le:
-                            try:
-                                from app.logger import app_logger
-                                app_logger.warning(f"[urlquery] logging error: {_le}")
-                            except Exception: pass
+                        except Exception: pass
             except Exception as e:
                 result["_search_error"] = str(e)
 
@@ -359,15 +337,7 @@ class URLQueryConnector(BaseConnector):
         page_url = (latest.get("url") or {}).get("fqdn") or raw.get("_ioc")
         rep_date = latest.get("date", "")[:10]
 
-        # Log ALL detection fields from best search result to find Telegram data
-        detection_field = latest.get("detection") or {}
-        try:
-            from app.logger import app_logger
-            for k, v in detection_field.items():
-                app_logger.warning(
-                    f"[urlquery] search.detection.{k} = {str(v)[:300]!r}"
-                )
-        except Exception: pass
+
 
         # ── Tags from alerts and verdict ───────────────────────
         tags = []
@@ -404,6 +374,74 @@ class URLQueryConnector(BaseConnector):
                         "severity": alert.get("severity", ""),
                         "date":     (alert.get("date") or "")[:10],
                     })
+            # ── Artifacts: Telegram Bot (report.artifacts.telegram[]) ───
+            # urlquery stores confirmed Telegram bot data in artifacts, not sensors
+            artifacts = full_rep.get("artifacts") or {}
+            telegram_artifacts = artifacts.get("telegram") or []
+            if telegram_artifacts:
+                try:
+                    from app.logger import app_logger
+                    app_logger.info(
+                        f"[urlquery] artifacts.telegram count={len(telegram_artifacts)} "
+                        f"keys={list(telegram_artifacts[0].keys())[:8]}"
+                    )
+                except Exception: pass
+                for tg in telegram_artifacts:
+                    url_obj  = tg.get("url") or {}
+                    bot_obj  = tg.get("bot") or {}
+                    chat_obj = tg.get("chat") or {}
+                    token    = tg.get("token") or ""
+                    url_str  = (url_obj.get("fqdn") or url_obj.get("addr") or "")
+                    ip_obj   = tg.get("ip") or {}
+                    ip_str   = ip_obj.get("addr", "") if isinstance(ip_obj, dict) else ""
+                    sa = {
+                        "sensor":   "urlquery",
+                        "alert":    "Telegram Bot detected",
+                        "severity": "high",
+                        "date":     rep_date,
+                        "url":      url_str[:200],
+                        "ip":       ip_str,
+                        "telegram": {
+                            "token":      token,
+                            "user_id":    bot_obj.get("id"),
+                            "username":   bot_obj.get("username", ""),
+                            "first_name": bot_obj.get("first_name", ""),
+                            "last_name":  bot_obj.get("last_name", ""),
+                            "chat_id":    chat_obj.get("id"),
+                            "chat_type":  chat_obj.get("type", ""),
+                            "chat_title": chat_obj.get("title", ""),
+                            "user_count": chat_obj.get("members_count"),
+                            "admins":     chat_obj.get("admins_count"),
+                            "pending":    None,
+                        },
+                    }
+                    ids_alerts.append({"sensor":"urlquery","alert":"Telegram Bot detected",
+                                       "severity":"high","date":rep_date})
+                    raw.setdefault("_uq_sensor_alerts", []).append(sa)
+                    result.tags = list(result.tags or []) + ["telegram-bot"]
+                    result.verdict_hint = "malicious"
+                    try:
+                        from app.logger import app_logger
+                        app_logger.info(
+                            f"[urlquery] Telegram artifact extracted: "
+                            f"token={bool(token)} "
+                            f"@{bot_obj.get('username','?')} "
+                            f"chat={chat_obj.get('title','?')!r}"
+                        )
+                    except Exception: pass
+
+            # ── detection.analyzer YARA hits (Telegram / malware) ────────
+            detect = full_rep.get("detection") or {}
+            for hit in (detect.get("analyzer") or [])[:5]:
+                htxt = hit.get("alert") or ""
+                if htxt and "telegram" in htxt.lower():
+                    ids_alerts.append({
+                        "sensor":   hit.get("sensor_name", "analyzer"),
+                        "alert":    htxt,
+                        "severity": hit.get("severity", "medium"),
+                        "date":     rep_date,
+                    })
+
             # urlquery-specific alerts — capture FULL detail
             uq_sensor_alerts = []
             for uq_alert in (sensors.get("urlquery") or [])[:10]:
