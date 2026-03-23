@@ -136,82 +136,76 @@ class URLQueryConnector(BaseConnector):
                         )
                     except Exception:
                         pass
-                else:
+
+                    # ── Step 3: Fetch latest full report ──────────                    # ── Step 3: Fetch latest full report ──────────
+                reports = search_data.get("reports", [])
+                if reports:
+                    # Log what report fields are available for debugging
                     try:
                         from app.logger import app_logger
-                        app_logger.warning(f"[urlquery] search status={s.status_code} body={s.text[:200]!r}")
-                    except Exception:
-                        pass
+                        r0 = reports[0]
+                        app_logger.info(
+                            f"[urlquery] report[0] keys={list(r0.keys())} "
+                            f"report_id={r0.get('report_id')} id={r0.get('id')}"
+                        )
+                    except Exception: pass
 
-                    # ── Step 3: Fetch latest full report ──────────
-                    reports = search_data.get("reports", [])
-                    if reports:
-                        # Log what report fields are available for debugging
+                    latest_id = (reports[0].get("report_id") or
+                                 reports[0].get("id") or
+                                 reports[0].get("report"))
+                    if latest_id:
                         try:
-                            from app.logger import app_logger
-                            r0 = reports[0]
-                            app_logger.info(
-                                f"[urlquery] report[0] keys={list(r0.keys())} "
-                                f"report_id={r0.get('report_id')} id={r0.get('id')}"
+                            r2 = await c.get(
+                                f"{BASE}/public/v1/report/{latest_id}",
+                                headers=headers,
+                                timeout=15.0,
                             )
-                        except Exception: pass
-
-                        latest_id = (reports[0].get("report_id") or
-                                     reports[0].get("id") or
-                                     reports[0].get("report"))
-                        if latest_id:
-                            try:
-                                r2 = await c.get(
-                                    f"{BASE}/public/v1/report/{latest_id}",
-                                    headers=headers,
-                                    timeout=15.0,
-                                )
-                                try:
-                                    from app.logger import app_logger
-                                    rep_keys = list(r2.json().keys()) if r2.status_code == 200 else []
-                                    app_logger.info(
-                                        f"[urlquery] full report id={latest_id} "
-                                        f"status={r2.status_code} "
-                                        f"keys={rep_keys[:8]}"
-                                    )
-                                    # Log sensors specifically
-                                    if r2.status_code == 200:
-                                        sensors = r2.json().get("sensors") or {}
-                                        app_logger.info(
-                                            f"[urlquery] sensors keys={list(sensors.keys())} "
-                                            f"urlquery_count={len(sensors.get('urlquery') or [])} "
-                                            f"ids_count={len(sensors.get('ids') or [])}"
-                                        )
-                                        uq_alerts = sensors.get("urlquery") or []
-                                        for i, a in enumerate(uq_alerts[:3]):
-                                            app_logger.info(
-                                                f"[urlquery] uq_alert[{i}] keys={list(a.keys())} "
-                                                f"alert={a.get('alert','?')!r}"
-                                            )
-                                except Exception: pass
-
-                                if r2.status_code == 200:
-                                    result["_report"] = r2.json()
-                                else:
-                                    try:
-                                        from app.logger import app_logger
-                                        app_logger.warning(
-                                            f"[urlquery] full report {latest_id} → "
-                                            f"HTTP {r2.status_code} body={r2.text[:100]!r}"
-                                        )
-                                    except Exception: pass
-                            except Exception as _e3:
-                                try:
-                                    from app.logger import app_logger
-                                    app_logger.warning(f"[urlquery] full report fetch error: {_e3}")
-                                except Exception: pass
-                        else:
                             try:
                                 from app.logger import app_logger
-                                app_logger.warning(
-                                    f"[urlquery] no report_id in report[0]: {reports[0]}"
+                                rep_keys = list(r2.json().keys()) if r2.status_code == 200 else []
+                                app_logger.info(
+                                    f"[urlquery] full report id={latest_id} "
+                                    f"status={r2.status_code} "
+                                    f"keys={rep_keys[:8]}"
                                 )
+                                # Log sensors specifically
+                                if r2.status_code == 200:
+                                    sensors = r2.json().get("sensors") or {}
+                                    app_logger.info(
+                                        f"[urlquery] sensors keys={list(sensors.keys())} "
+                                        f"urlquery_count={len(sensors.get('urlquery') or [])} "
+                                        f"ids_count={len(sensors.get('ids') or [])}"
+                                    )
+                                    uq_alerts = sensors.get("urlquery") or []
+                                    for i, a in enumerate(uq_alerts[:3]):
+                                        app_logger.info(
+                                            f"[urlquery] uq_alert[{i}] keys={list(a.keys())} "
+                                            f"alert={a.get('alert','?')!r}"
+                                        )
                             except Exception: pass
+
+                            if r2.status_code == 200:
+                                result["_report"] = r2.json()
+                            else:
+                                try:
+                                    from app.logger import app_logger
+                                    app_logger.warning(
+                                        f"[urlquery] full report {latest_id} → "
+                                        f"HTTP {r2.status_code} body={r2.text[:100]!r}"
+                                    )
+                                except Exception: pass
+                        except Exception as _e3:
+                            try:
+                                from app.logger import app_logger
+                                app_logger.warning(f"[urlquery] full report fetch error: {_e3}")
+                            except Exception: pass
+                    else:
+                        try:
+                            from app.logger import app_logger
+                            app_logger.warning(
+                                f"[urlquery] no report_id in report[0]: {reports[0]}"
+                            )
+                        except Exception: pass
             except Exception as e:
                 result["_search_error"] = str(e)
 
