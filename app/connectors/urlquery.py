@@ -137,74 +137,84 @@ class URLQueryConnector(BaseConnector):
                     except Exception:
                         pass
 
-                    # ── Step 3: Fetch latest full report ──────────                    # ── Step 3: Fetch latest full report ──────────
+                    # ── Step 3: Fetch ALL reports, pick the richest ─────
+                # (Telegram bot / malware might be in older report, not newest)
                 reports = search_data.get("reports", [])
                 if reports:
-                    # Log what report fields are available for debugging
-                    try:
-                        from app.logger import app_logger
-                        r0 = reports[0]
-                        app_logger.info(
-                            f"[urlquery] report[0] keys={list(r0.keys())} "
-                            f"report_id={r0.get('report_id')} id={r0.get('id')}"
-                        )
-                    except Exception: pass
+                    import asyncio as _asyncio
 
-                    latest_id = (reports[0].get("report_id") or
-                                 reports[0].get("id") or
-                                 reports[0].get("report"))
-                    if latest_id:
+                    async def _fetch_report(rep_item):
+                        rid = (rep_item.get("report_id") or
+                               rep_item.get("id") or
+                               rep_item.get("report"))
+                        if not rid:
+                            return None
                         try:
                             r2 = await c.get(
-                                f"{BASE}/public/v1/report/{latest_id}",
+                                f"{BASE}/public/v1/report/{rid}",
                                 headers=headers,
                                 timeout=15.0,
                             )
-                            try:
-                                from app.logger import app_logger
-                                rep_keys = list(r2.json().keys()) if r2.status_code == 200 else []
-                                app_logger.info(
-                                    f"[urlquery] full report id={latest_id} "
-                                    f"status={r2.status_code} "
-                                    f"keys={rep_keys[:8]}"
-                                )
-                                # Log sensors specifically
-                                if r2.status_code == 200:
-                                    sensors = r2.json().get("sensors") or {}
-                                    app_logger.info(
-                                        f"[urlquery] sensors keys={list(sensors.keys())} "
-                                        f"urlquery_count={len(sensors.get('urlquery') or [])} "
-                                        f"ids_count={len(sensors.get('ids') or [])}"
-                                    )
-                                    uq_alerts = sensors.get("urlquery") or []
-                                    for i, a in enumerate(uq_alerts[:3]):
-                                        app_logger.info(
-                                            f"[urlquery] uq_alert[{i}] keys={list(a.keys())} "
-                                            f"alert={a.get('alert','?')!r}"
-                                        )
-                            except Exception: pass
-
                             if r2.status_code == 200:
-                                result["_report"] = r2.json()
-                            else:
+                                data = r2.json()
+                                sensors = data.get("sensors") or {}
+                                uq_sens = sensors.get("urlquery") or []
+                                ids_sens = sensors.get("ids") or []
+                                # Score: telegram=100, other uq alerts=10, ids=5, just data=1
+                                score = 0
+                                for a in uq_sens:
+                                    alert_txt = (a.get("alert") or "").lower()
+                                    if "telegram" in alert_txt:
+                                        score += 100
+                                    elif a.get("meta") or a.get("tags"):
+                                        score += 10
+                                    else:
+                                        score += 5
+                                for ids_blk in ids_sens:
+                                    # ids_blk might have .alerts[] or direct alert fields
+                                    alerts_list = (ids_blk.get("alerts") or
+                                                   [ids_blk] if ids_blk.get("alert") else [])
+                                    score += len(alerts_list) * 2
                                 try:
                                     from app.logger import app_logger
-                                    app_logger.warning(
-                                        f"[urlquery] full report {latest_id} → "
-                                        f"HTTP {r2.status_code} body={r2.text[:100]!r}"
+                                    app_logger.info(
+                                        f"[urlquery] report {rid} score={score} "
+                                        f"uq={len(uq_sens)} ids={len(ids_sens)} "
+                                        f"alerts={[a.get('alert','?')[:40] for a in uq_sens[:2]]}"
                                     )
                                 except Exception: pass
-                        except Exception as _e3:
+                                return (score, data)
+                        except Exception as _fe:
                             try:
                                 from app.logger import app_logger
-                                app_logger.warning(f"[urlquery] full report fetch error: {_e3}")
+                                app_logger.warning(f"[urlquery] report {rid} fetch error: {_fe}")
                             except Exception: pass
-                    else:
+                        return None
+
+                    # Fetch all reports concurrently
+                    tasks = [_fetch_report(r) for r in reports[:3]]
+                    fetched = await _asyncio.gather(*tasks)
+                    fetched = [(s, d) for r in fetched if r for s, d in [r]]
+
+                    if fetched:
+                        # Pick report with highest score (richest intel)
+                        best_score, best_report = max(fetched, key=lambda x: x[0])
+                        result["_report"] = best_report
                         try:
                             from app.logger import app_logger
-                            app_logger.warning(
-                                f"[urlquery] no report_id in report[0]: {reports[0]}"
+                            sensors = best_report.get("sensors") or {}
+                            app_logger.info(
+                                f"[urlquery] best report score={best_score} "
+                                f"uq_alerts={len(sensors.get('urlquery') or [])} "
+                                f"ids_blocks={len(sensors.get('ids') or [])}"
                             )
+                            for i, a in enumerate((sensors.get("urlquery") or [])[:3]):
+                                app_logger.info(
+                                    f"[urlquery] uq_alert[{i}] "
+                                    f"alert={a.get('alert','?')!r} "
+                                    f"has_meta={bool(a.get('meta'))} "
+                                    f"meta_keys={list((a.get('meta') or {}).keys())[:5]}"
+                                )
                         except Exception: pass
             except Exception as e:
                 result["_search_error"] = str(e)
@@ -283,31 +293,64 @@ class URLQueryConnector(BaseConnector):
                 if not alert_txt:
                     continue
                 # Build rich alert object with all available metadata
+                # URL and IP can be at top-level or inside meta
+                meta    = uq_alert.get("meta") or {}
+                url_val = uq_alert.get("url") or meta.get("url") or ""
+                ip_val  = ((uq_alert.get("ip") or {}).get("addr") or
+                            meta.get("ip") or "")
+
                 alert_obj = {
                     "sensor":   "urlquery",
                     "alert":    alert_txt,
                     "severity": uq_alert.get("severity", "medium"),
                     "date":     rep_date,
-                    "url":      uq_alert.get("url", ""),
-                    "ip":       (uq_alert.get("ip") or {}).get("addr", ""),
+                    "url":      url_val[:200] if url_val else "",
+                    "ip":       ip_val,
                 }
-                # Telegram Bot specific fields
-                if "telegram" in alert_txt.lower() or uq_alert.get("token"):
-                    bot_ov = uq_alert.get("bot_overview") or {}
-                    chat_i = uq_alert.get("chat_info") or {}
+
+                # Telegram Bot: check both top-level AND meta fields
+                # urlquery stores: meta.token, meta.bot_overview, meta.chat_info
+                # OR: token, bot_overview, chat_info at top level
+                is_telegram = "telegram" in alert_txt.lower()
+                token   = (uq_alert.get("token") or
+                           meta.get("token") or
+                           meta.get("bot_token") or "")
+                bot_ov  = (uq_alert.get("bot_overview") or
+                           meta.get("bot_overview") or
+                           meta.get("bot") or {})
+                chat_i  = (uq_alert.get("chat_info") or
+                           meta.get("chat_info") or
+                           meta.get("chat") or {})
+
+                # Also check tags for telegram evidence
+                tags = uq_alert.get("tags") or []
+                if any("telegram" in str(t).lower() for t in tags):
+                    is_telegram = True
+
+                if is_telegram or token or bot_ov:
                     alert_obj["telegram"] = {
-                        "token":       uq_alert.get("token", ""),
-                        "user_id":     bot_ov.get("user_id"),
+                        "token":       token,
+                        "user_id":     bot_ov.get("user_id") or bot_ov.get("id"),
                         "username":    bot_ov.get("username", ""),
                         "first_name":  bot_ov.get("first_name", ""),
                         "last_name":   bot_ov.get("last_name", ""),
-                        "chat_id":     chat_i.get("chat_id"),
-                        "chat_type":   chat_i.get("chat_type", ""),
+                        "chat_id":     chat_i.get("chat_id") or chat_i.get("id"),
+                        "chat_type":   chat_i.get("chat_type") or chat_i.get("type", ""),
                         "chat_title":  chat_i.get("title", ""),
-                        "user_count":  chat_i.get("user_count"),
+                        "user_count":  chat_i.get("user_count") or chat_i.get("members_count"),
                         "admins":      chat_i.get("admins"),
                         "pending":     chat_i.get("pending_msgs"),
                     }
+                    # Log full meta for debugging
+                    try:
+                        from app.logger import app_logger
+                        app_logger.info(
+                            f"[urlquery] telegram meta: token={bool(token)} "
+                            f"bot_ov_keys={list(bot_ov.keys())} "
+                            f"chat_keys={list(chat_i.keys())} "
+                            f"meta_keys={list(meta.keys())[:10]}"
+                        )
+                    except Exception: pass
                 ids_alerts.append({
                     "sensor":   "urlquery",
                     "alert":    alert_txt,
