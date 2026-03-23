@@ -164,6 +164,14 @@ async def _results_page_inner(
         if sr.source == "urlquery":
             try:
                 raw_uq = json.loads(sr.raw_json or "{}")
+                _uq_raw_keys = [k for k in raw_uq if k.startswith("_")]
+                try:
+                    from app.logger import app_logger
+                    app_logger.info(
+                        f"[results] urlquery raw_json keys: {_uq_raw_keys} "
+                        f"sensor_alerts={len(raw_uq.get('_uq_sensor_alerts') or [])}"
+                    )
+                except Exception: pass
                 if raw_uq.get("_detected_urls"):
                     norm["detected_urls"] = raw_uq["_detected_urls"]
                 if raw_uq.get("_uq_alerts"):
@@ -174,8 +182,11 @@ async def _results_page_inner(
                     norm["ids_alerts"] = raw_uq["_ids_alerts"]
                 if raw_uq.get("_file_hashes"):
                     norm["file_hashes"] = raw_uq["_file_hashes"]
-            except Exception:
-                pass
+            except Exception as _ue:
+                try:
+                    from app.logger import app_logger
+                    app_logger.warning(f"[results] urlquery raw_json extraction error: {_ue}")
+                except Exception: pass
 
         sources[sr.source] = {
             "status":     sr.status.value,
