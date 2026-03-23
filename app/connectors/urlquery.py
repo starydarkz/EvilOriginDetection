@@ -253,25 +253,40 @@ class URLQueryConnector(BaseConnector):
                     fetched = [(s, d) for r in fetched if r for s, d in [r]]
 
                     if fetched:
-                        # Pick report with highest score (richest intel)
                         best_score, best_report = max(fetched, key=lambda x: x[0])
                         result["_report"] = best_report
                         try:
                             from app.logger import app_logger
-                            sensors = best_report.get("sensors") or {}
-                            app_logger.info(
+                            sensors  = best_report.get("sensors") or {}
+                            detect   = best_report.get("detection") or {}
+                            app_logger.warning(
                                 f"[urlquery] best report score={best_score} "
-                                f"uq_alerts={len(sensors.get('urlquery') or [])} "
-                                f"ids_blocks={len(sensors.get('ids') or [])}"
+                                f"top_keys={list(best_report.keys())} "
+                                f"sensors_keys={list(sensors.keys())} "
+                                f"detection_keys={list(detect.keys())} "
+                                f"uq_sensor_alerts={len(sensors.get('urlquery') or [])}"
                             )
-                            for i, a in enumerate((sensors.get("urlquery") or [])[:3]):
-                                app_logger.info(
-                                    f"[urlquery] uq_alert[{i}] "
-                                    f"alert={a.get('alert','?')!r} "
-                                    f"has_meta={bool(a.get('meta'))} "
-                                    f"meta_keys={list((a.get('meta') or {}).keys())[:5]}"
+                            # Log ALL keys and values at top level for full discovery
+                            for k, v in best_report.items():
+                                if k not in ('final', 'sensors'):
+                                    app_logger.warning(
+                                        f"[urlquery] report.{k} = {str(v)[:120]!r}"
+                                    )
+                            # Log detection sub-fields
+                            for k, v in detect.items():
+                                app_logger.warning(
+                                    f"[urlquery] detection.{k} = {str(v)[:200]!r}"
                                 )
-                        except Exception: pass
+                            # Log sensors sub-fields  
+                            for k, v in sensors.items():
+                                app_logger.warning(
+                                    f"[urlquery] sensors.{k} = {str(v)[:200]!r}"
+                                )
+                        except Exception as _le:
+                            try:
+                                from app.logger import app_logger
+                                app_logger.warning(f"[urlquery] logging error: {_le}")
+                            except Exception: pass
             except Exception as e:
                 result["_search_error"] = str(e)
 
@@ -344,19 +359,15 @@ class URLQueryConnector(BaseConnector):
         page_url = (latest.get("url") or {}).get("fqdn") or raw.get("_ioc")
         rep_date = latest.get("date", "")[:10]
 
-        # Try to extract Telegram data from search result detection field
-        # (in case full report doesn't have sensors)
+        # Log ALL detection fields from best search result to find Telegram data
         detection_field = latest.get("detection") or {}
-        if isinstance(detection_field, dict):
-            for key, val in detection_field.items():
-                if "telegram" in key.lower() or (isinstance(val, dict) and val.get("token")):
-                    try:
-                        from app.logger import app_logger
-                        app_logger.info(
-                            f"[urlquery] detection field has telegram: "
-                            f"key={key!r} val_keys={list(val.keys()) if isinstance(val, dict) else val}"
-                        )
-                    except Exception: pass
+        try:
+            from app.logger import app_logger
+            for k, v in detection_field.items():
+                app_logger.warning(
+                    f"[urlquery] search.detection.{k} = {str(v)[:300]!r}"
+                )
+        except Exception: pass
 
         # ── Tags from alerts and verdict ───────────────────────
         tags = []
