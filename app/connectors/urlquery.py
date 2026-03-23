@@ -219,14 +219,48 @@ class URLQueryConnector(BaseConnector):
                         "severity": alert.get("severity", ""),
                         "date":     (alert.get("date") or "")[:10],
                     })
-            # urlquery-specific alerts
-            for uq_alert in (sensors.get("urlquery") or [])[:4]:
+            # urlquery-specific alerts — capture FULL detail
+            uq_sensor_alerts = []
+            for uq_alert in (sensors.get("urlquery") or [])[:10]:
+                alert_txt = uq_alert.get("alert", "")
+                if not alert_txt:
+                    continue
+                # Build rich alert object with all available metadata
+                alert_obj = {
+                    "sensor":   "urlquery",
+                    "alert":    alert_txt,
+                    "severity": uq_alert.get("severity", "medium"),
+                    "date":     rep_date,
+                    "url":      uq_alert.get("url", ""),
+                    "ip":       (uq_alert.get("ip") or {}).get("addr", ""),
+                }
+                # Telegram Bot specific fields
+                if "telegram" in alert_txt.lower() or uq_alert.get("token"):
+                    bot_ov = uq_alert.get("bot_overview") or {}
+                    chat_i = uq_alert.get("chat_info") or {}
+                    alert_obj["telegram"] = {
+                        "token":       uq_alert.get("token", ""),
+                        "user_id":     bot_ov.get("user_id"),
+                        "username":    bot_ov.get("username", ""),
+                        "first_name":  bot_ov.get("first_name", ""),
+                        "last_name":   bot_ov.get("last_name", ""),
+                        "chat_id":     chat_i.get("chat_id"),
+                        "chat_type":   chat_i.get("chat_type", ""),
+                        "chat_title":  chat_i.get("title", ""),
+                        "user_count":  chat_i.get("user_count"),
+                        "admins":      chat_i.get("admins"),
+                        "pending":     chat_i.get("pending_msgs"),
+                    }
                 ids_alerts.append({
                     "sensor":   "urlquery",
-                    "alert":    uq_alert.get("alert", ""),
+                    "alert":    alert_txt,
                     "severity": uq_alert.get("severity", "medium"),
                     "date":     rep_date,
                 })
+                uq_sensor_alerts.append(alert_obj)
+
+            if uq_sensor_alerts:
+                raw["_uq_sensor_alerts"] = uq_sensor_alerts
 
         if ids_alerts:
             raw["_ids_alerts"] = ids_alerts

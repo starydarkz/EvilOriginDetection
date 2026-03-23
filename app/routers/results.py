@@ -168,6 +168,8 @@ async def _results_page_inner(
                     norm["detected_urls"] = raw_uq["_detected_urls"]
                 if raw_uq.get("_uq_alerts"):
                     norm["uq_alerts"] = raw_uq["_uq_alerts"]
+                if raw_uq.get("_uq_sensor_alerts"):
+                    norm["uq_sensor_alerts"] = raw_uq["_uq_sensor_alerts"]
                 if raw_uq.get("_ids_alerts"):
                     norm["ids_alerts"] = raw_uq["_ids_alerts"]
                 if raw_uq.get("_file_hashes"):

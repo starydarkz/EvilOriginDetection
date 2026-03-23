@@ -869,23 +869,79 @@
         {% set _uq = sources.get('urlquery',{}) %}
         {% if _uq.get('status') == 'ok' and _uq.get('verdict_hint') in ('malicious','suspicious') %}
         <div style="margin-bottom:14px">
-          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">urlquery.net — URL Reputation & IDS</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">urlquery.net — URL Reputation & IDS</div>
+          {# Verdict + tags #}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;margin-bottom:8px">
             <span style="font-size:14px;font-weight:700;color:var(--v-{{ _uq.get('verdict_hint') or 'unknown' }})">{{ _uq.get('verdict_hint','').capitalize() }}</span>
             {% if _uq.get('tags') %}{% for t in _uq.get('tags')[:4] %}<span style="font-size:10px;padding:1px 7px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text2)">{{ t }}</span>{% endfor %}{% endif %}
           </div>
-          {% set _uq_reports = _uq.get('reports') or [] %}
-          {% for rep in _uq_reports[:4] %}
-          {% if rep.get('summary') and 'IDS:' in rep.get('summary','') %}
-          <div style="font-size:11px;color:var(--v-malicious);font-family:'Space Mono',monospace;margin-bottom:2px">{{ rep.get('summary') }}</div>
-          {% endif %}
+
+          {# Full sensor alert cards — Telegram bot etc #}
+          {% set _uq_sa = _uq.get('uq_sensor_alerts') or [] %}
+          {% for sa in _uq_sa %}
+          {% set _is_tg = sa.telegram is defined and sa.telegram %}
+          <div style="margin-bottom:10px;border:1px solid {% if _is_tg %}rgba(255,85,85,0.35){% else %}var(--border){% endif %};border-radius:7px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:{% if _is_tg %}rgba(255,85,85,0.08){% else %}var(--bg3){% endif %}">
+              <span style="font-size:10px;font-weight:700;font-family:'Space Mono',monospace;color:{% if sa.severity in ('high','critical') %}var(--v-malicious){% elif sa.severity == 'medium' %}var(--v-suspicious){% else %}var(--text2){% endif %}">
+                {{ sa.alert }}
+              </span>
+              {% if sa.severity %}<span style="font-size:9px;color:var(--text3);margin-left:auto;font-family:'Space Mono',monospace">{{ sa.severity }}</span>{% endif %}
+            </div>
+            {% if sa.url or sa.ip %}
+            <div style="padding:5px 10px;border-top:1px solid var(--border);font-size:11px;font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap">
+              {% if sa.url %}<span style="color:var(--text2)">{{ sa.url }}</span>{% endif %}
+              {% if sa.ip %}<span style="color:var(--teal)">{{ sa.ip }}</span>{% endif %}
+            </div>
+            {% endif %}
+            {% if _is_tg %}
+            {% set tg = sa.telegram %}
+            <div style="padding:8px 10px;border-top:1px solid rgba(255,85,85,0.15)">
+              {% if tg.token %}
+              <div style="margin-bottom:8px;padding:5px 8px;background:rgba(0,0,0,0.3);border-radius:4px;border-left:3px solid var(--v-malicious)">
+                <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:2px;font-family:'Space Mono',monospace">Token</div>
+                <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--v-malicious);word-break:break-all">{{ tg.token }}</div>
+              </div>
+              {% endif %}
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">
+                <div>
+                  <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;font-family:'Space Mono',monospace">Bot Overview</div>
+                  {% if tg.user_id %}<div style="margin-bottom:2px"><span style="color:var(--text3)">ID: </span><span style="font-family:'Space Mono',monospace;color:var(--text2)">{{ tg.user_id }}</span></div>{% endif %}
+                  {% if tg.username %}<div style="margin-bottom:2px"><span style="color:var(--text3)">@</span><span style="font-family:'Space Mono',monospace;color:var(--accent)">{{ tg.username }}</span></div>{% endif %}
+                  {% if tg.first_name %}<div style="margin-bottom:2px;color:var(--text2)">{{ tg.first_name }}{% if tg.last_name and tg.last_name != 'N/A' %} {{ tg.last_name }}{% endif %}</div>{% endif %}
+                  {% if tg.token %}<a href="https://api.telegram.org/bot{{ tg.token }}/getMe" target="_blank" rel="noopener" style="display:inline-block;margin-top:4px;font-size:10px;color:var(--teal);text-decoration:none;border:1px solid rgba(68,221,187,0.3);padding:1px 7px;border-radius:3px;font-family:'Space Mono',monospace">Verify ↗</a>{% endif %}
+                </div>
+                <div>
+                  <div style="font-size:9px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;font-family:'Space Mono',monospace">Chat Info</div>
+                  {% if tg.chat_id %}<div style="margin-bottom:2px"><span style="color:var(--text3)">ID: </span><span style="font-family:'Space Mono',monospace;color:var(--text2)">{{ tg.chat_id }}</span></div>{% endif %}
+                  {% if tg.chat_type %}<div style="margin-bottom:2px"><span style="color:var(--text3)">Type: </span><span style="color:var(--text2)">{{ tg.chat_type }}</span></div>{% endif %}
+                  {% if tg.chat_title %}<div style="margin-bottom:2px"><span style="color:var(--text3)">Title: </span><span style="color:var(--text2)">{{ tg.chat_title }}</span></div>{% endif %}
+                  {% if tg.user_count is not none %}<div style="margin-bottom:2px"><span style="color:var(--text3)">Members: </span><span style="color:var(--text2)">{{ tg.user_count }}</span></div>{% endif %}
+                  {% if tg.admins is not none %}<div style="margin-bottom:2px"><span style="color:var(--text3)">Admins: </span><span style="color:var(--text2)">{{ tg.admins }}</span></div>{% endif %}
+                </div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
           {% endfor %}
+
+          {# IDS alerts detail #}
+          {% set _uq_ids = _uq.get('ids_alerts') or [] %}
+          {% if _uq_ids %}
+          <div style="margin-top:6px">
+            <div style="font-size:9px;color:var(--text3);text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:5px">IDS / Suricata</div>
+            {% for a in _uq_ids[:6] %}
+            <div style="font-size:11px;color:var(--v-malicious);font-family:'Space Mono',monospace;margin-bottom:2px;padding:3px 8px;background:rgba(255,85,85,0.05);border-radius:3px">
+              ⚡ {{ a.alert }}{% if a.severity %} <span style="color:var(--text3)">[{{ a.severity }}]</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
         </div>
         {% endif %}
 
         {% if not ((_fd.get('verdict_hint')=='malicious') or (_tf.get('verdict_hint')=='malicious') or
                    (_uh.get('verdict_hint')=='malicious') or _hl.get('known_file') or
-                   (_uq.get('verdict_hint') in ('malicious','suspicious'))) %}
+                   (_uq.get('verdict_hint') in ('malicious','suspicious') or _uq.get('uq_sensor_alerts'))) %}
         <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0">
           Sources queried — no threat intelligence matches found for this indicator.
         </div>
@@ -1055,29 +1111,83 @@
         </div>
         {% endif %}
 
-        {# ── URLQuery Alerts ──────────────────────────────────── #}
-        {% set _uq      = sources.get('urlquery', {}) %}
-        {% set _uq_alerts    = _uq.get('uq_alerts') or [] %}
-        {% set _uq_ids_alerts= _uq.get('ids_alerts') or [] %}
-        {% if _uq_alerts or _uq_ids_alerts %}
+        {# ── URLQuery Sensor Alerts ───────────────────────────── #}
+        {% set _uq = sources.get('urlquery', {}) %}
+        {% set _uq_sensor_alerts = _uq.get('uq_sensor_alerts') or [] %}
+        {% set _uq_ids_alerts    = _uq.get('ids_alerts') or [] %}
+        {% if _uq_sensor_alerts or _uq_ids_alerts %}
         <div style="margin-bottom:16px">
-          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">
             URLQuery Detections
           </div>
-          {% for alert in _uq_alerts %}
-          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:4px;background:var(--bg3);border-radius:5px;border-left:3px solid {% if alert.severity == 'high' or alert.severity == 'critical' %}var(--v-malicious){% elif alert.severity == 'medium' %}var(--v-suspicious){% else %}var(--border){% endif %}">
-            <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,170,68,0.15);color:var(--v-suspicious);text-transform:uppercase;white-space:nowrap">{{ alert.type }}</span>
-            <span style="font-size:11px;color:var(--text2);font-family:'Space Mono',monospace">{{ alert.alert }}</span>
-            <span style="margin-left:auto;font-size:9px;color:var(--text3)">{{ alert.severity }}</span>
+
+          {# ── Sensor alerts (Telegram Bot, Phishing, etc.) ── #}
+          {% for sa in _uq_sensor_alerts %}
+          {% set _is_tg = sa.telegram is defined and sa.telegram %}
+          <div style="margin-bottom:12px;border:1px solid {% if _is_tg %}rgba(255,85,85,0.3){% else %}var(--border){% endif %};border-radius:8px;overflow:hidden">
+            {# Header bar #}
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:{% if _is_tg %}rgba(255,85,85,0.08){% else %}var(--bg3){% endif %}">
+              <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:{% if sa.severity in ('high','critical') %}rgba(255,85,85,0.2){% elif sa.severity == 'medium' %}rgba(255,170,68,0.2){% else %}rgba(90,90,128,0.2){% endif %};color:{% if sa.severity in ('high','critical') %}var(--v-malicious){% elif sa.severity == 'medium' %}var(--v-suspicious){% else %}var(--text3){% endif %};text-transform:uppercase;font-family:'Space Mono',monospace">
+                {{ sa.alert }}
+              </span>
+              {% if sa.severity %}<span style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;margin-left:auto">{{ sa.severity }}</span>{% endif %}
+            </div>
+
+            {# URL + IP row #}
+            {% if sa.url or sa.ip %}
+            <div style="padding:6px 12px;border-top:1px solid var(--border);font-size:11px;font-family:'Space Mono',monospace;color:var(--text3);display:flex;gap:12px;flex-wrap:wrap">
+              {% if sa.url %}<span style="color:var(--text2)">🌐 {{ sa.url }}</span>{% endif %}
+              {% if sa.ip %}<span>IP: <span style="color:var(--teal)">{{ sa.ip }}</span></span>{% endif %}
+            </div>
+            {% endif %}
+
+            {# Telegram Bot details #}
+            {% if _is_tg %}
+            {% set tg = sa.telegram %}
+            <div style="padding:10px 12px;border-top:1px solid rgba(255,85,85,0.15)">
+              {# Token #}
+              {% if tg.token %}
+              <div style="margin-bottom:8px;padding:6px 10px;background:rgba(0,0,0,0.3);border-radius:5px;border-left:3px solid var(--v-malicious)">
+                <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:3px">Bot Token</div>
+                <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--v-malicious);word-break:break-all">{{ tg.token }}</div>
+              </div>
+              {% endif %}
+              {# Two-column: Bot Overview + Chat Info #}
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+                <div>
+                  <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:6px">Bot Overview</div>
+                  {% if tg.user_id %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">User ID: </span><span style="color:var(--text2);font-family:'Space Mono',monospace">{{ tg.user_id }}</span></div>{% endif %}
+                  {% if tg.username %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">Username: </span><span style="color:var(--accent);font-family:'Space Mono',monospace">@{{ tg.username }}</span></div>{% endif %}
+                  {% if tg.first_name %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">Name: </span><span style="color:var(--text2)">{{ tg.first_name }}{% if tg.last_name and tg.last_name != 'N/A' %} {{ tg.last_name }}{% endif %}</span></div>{% endif %}
+                  {% if tg.token %}<div style="margin-top:6px"><a href="https://api.telegram.org/bot{{ tg.token }}/getMe" target="_blank" rel="noopener" style="font-size:10px;color:var(--teal);text-decoration:none;border:1px solid rgba(68,221,187,0.3);padding:2px 8px;border-radius:3px;font-family:'Space Mono',monospace">Verify ↗</a></div>{% endif %}
+                </div>
+                <div>
+                  <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:6px">Chat Info</div>
+                  {% if tg.chat_id %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">Chat ID: </span><span style="color:var(--text2);font-family:'Space Mono',monospace">{{ tg.chat_id }}</span></div>{% endif %}
+                  {% if tg.chat_type %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">Type: </span><span style="color:var(--text2)">{{ tg.chat_type }}</span></div>{% endif %}
+                  {% if tg.chat_title %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">Title: </span><span style="color:var(--text2)">{{ tg.chat_title }}</span></div>{% endif %}
+                  {% if tg.user_count is not none %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">Members: </span><span style="color:var(--text2)">{{ tg.user_count }}</span></div>{% endif %}
+                  {% if tg.admins is not none %}<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--text3)">Admins: </span><span style="color:var(--text2)">{{ tg.admins }}</span></div>{% endif %}
+                  {% if tg.pending is not none %}<div style="font-size:11px"><span style="color:var(--text3)">Pending: </span><span style="color:var(--text2)">{{ tg.pending }}</span></div>{% endif %}
+                </div>
+              </div>
+            </div>
+            {% endif %}
           </div>
           {% endfor %}
-          {% for alert in _uq_ids_alerts[:6] %}
-          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:4px;background:var(--bg3);border-radius:5px;border-left:3px solid var(--v-malicious)">
-            <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,85,85,0.15);color:var(--v-malicious);text-transform:uppercase;white-space:nowrap">IDS</span>
-            <span style="font-size:11px;color:var(--text2);font-family:'Space Mono',monospace">{{ alert.alert }}</span>
-            <span style="margin-left:auto;font-size:9px;color:var(--text3)">{{ alert.severity }}</span>
+
+          {# IDS Alerts #}
+          {% if _uq_ids_alerts %}
+          <div style="margin-top:8px">
+            <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:6px">IDS / Suricata Alerts</div>
+            {% for alert in _uq_ids_alerts[:8] %}
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;margin-bottom:3px;background:var(--bg3);border-radius:4px;border-left:3px solid var(--v-malicious)">
+              <span style="font-size:10px;font-family:'Space Mono',monospace;color:var(--text2)">{{ alert.alert }}</span>
+              <span style="margin-left:auto;font-size:9px;color:var(--text3);white-space:nowrap">{{ alert.severity }}</span>
+            </div>
+            {% endfor %}
           </div>
-          {% endfor %}
+          {% endif %}
         </div>
         {% endif %}
 
