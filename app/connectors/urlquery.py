@@ -246,6 +246,49 @@ class URLQueryConnector(BaseConnector):
         if file_hashes:
             raw["_file_hashes"] = file_hashes
 
+        # ── Detected URLs from HTTP transactions ───────────────
+        if full_rep:
+            uq_http = full_rep.get("http") or []
+            detected_urls = []
+            for txn in uq_http[:30]:
+                req_obj = txn.get("request") or {}
+                rsp_obj = txn.get("response") or {}
+                url = req_obj.get("url") or req_obj.get("uri") or ""
+                method = req_obj.get("method", "GET")
+                status = rsp_obj.get("status") or rsp_obj.get("status_code") or 0
+                if url:
+                    detected_urls.append({
+                        "url":    url[:200],
+                        "method": method,
+                        "status": status,
+                    })
+            if detected_urls:
+                raw["_detected_urls"] = detected_urls
+
+            # ── URLQuery sensor alerts (non-IDS) ──────────────
+            sensors  = full_rep.get("sensors") or {}
+            uq_alerts = []
+            for alert in (sensors.get("urlquery") or []):
+                txt = alert.get("alert") or alert.get("description") or ""
+                if txt:
+                    uq_alerts.append({
+                        "alert":    txt,
+                        "severity": alert.get("severity", "medium"),
+                        "type":     "urlquery",
+                    })
+            # Also include IDS alerts summary
+            for ids_sensor in (sensors.get("ids") or []):
+                for alert in (ids_sensor.get("alerts") or [])[:5]:
+                    txt = alert.get("alert") or alert.get("signature") or ""
+                    if txt:
+                        uq_alerts.append({
+                            "alert":    txt,
+                            "severity": alert.get("severity", "medium"),
+                            "type":     "ids",
+                        })
+            if uq_alerts:
+                raw["_uq_alerts"] = uq_alerts
+
         # ── Credential leak scan in JS/DOM ─────────────────────
         credential_leaks = []
         js_data = (full_rep.get("javascript") or {}) if full_rep else {}

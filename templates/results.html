@@ -266,189 +266,6 @@
       {% endif %}
     </div>
 
-    {# ── SECTION 2a: WEB INTELLIGENCE (domain/url only) ── #}
-    {% if ioc.type.value in ['domain','url'] %}
-    {% set has_web_data = unified.http_status or unified.http_title or unified.technologies or unified.screenshot_url or unified.redirects or unified.urlscan_ok %}
-    {% if has_web_data %}
-    <div class="section-card anim-fade-up anim-delay-2">
-      <div class="section-card-title">🌐 Web Intelligence</div>
-
-      {# ── Status + title + links row ── #}
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        {% if unified.http_status %}
-        <span class="badge badge-{{ 'clean' if unified.http_status < 400 else 'suspicious' if unified.http_status < 500 else 'malicious' }}">
-          HTTP {{ unified.http_status }}
-        </span>
-        {% endif %}
-        {% if unified.http_title %}
-        <span style="font-size:14px;font-weight:600;color:var(--text)">"{{ unified.http_title[:50] }}"</span>
-        {% endif %}
-        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-          {% set _us = sources.get('urlscan',{}) %}
-          {% if _us.get('dom_url') %}
-          <a href="{{ _us.get('dom_url') }}" target="_blank" rel="noopener"
-             style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;
-                    text-decoration:none;border:1px solid var(--border);padding:2px 7px;border-radius:4px">
-            DOM ↗
-          </a>
-          {% endif %}
-          {% if source_links.get('urlscan') and source_links.get('urlscan') != '#' %}
-          <a href="{{ source_links.get('urlscan') }}" target="_blank" rel="noopener"
-             style="font-size:10px;color:var(--teal);font-family:'Space Mono',monospace;
-                    text-decoration:none;border:1px solid rgba(68,221,187,0.3);
-                    padding:2px 7px;border-radius:4px">
-            Full scan ↗
-          </a>
-          {% endif %}
-        </div>
-      </div>
-
-      {# ── Screenshot thumbnail ── #}
-      {% if unified.screenshot_url %}
-      <div style="margin-bottom:12px;border-radius:8px;overflow:hidden;
-                  border:1px solid var(--border);position:relative;background:var(--bg3)">
-        <div id="ss-thumb-loading" style="height:140px;display:flex;align-items:center;
-             justify-content:center;color:var(--text3);font-size:11px">
-          <span style="animation:spin 1.4s linear infinite;font-size:18px;opacity:0.3">◌</span>
-        </div>
-        <img id="ss-thumb-img"
-             src="{{ unified.screenshot_url }}"
-             referrerpolicy="no-referrer"
-             alt="Screenshot"
-             style="width:100%;display:none;cursor:pointer"
-             onclick="switchTab('tab-screenshot',document.querySelector('[onclick*=tab-screenshot]'))"
-             onload="this.style.display='block';document.getElementById('ss-thumb-loading').style.display='none'"
-             onerror="ssThumbFail(this)">
-        <div id="ss-thumb-fallback" style="display:none;height:80px;align-items:center;
-             justify-content:center;gap:8px;flex-direction:column">
-          <a href="{{ unified.screenshot_url }}" target="_blank" rel="noopener"
-             style="font-size:11px;color:var(--teal);font-family:'Space Mono',monospace">
-            View screenshot ↗
-          </a>
-        </div>
-      </div>
-      <script>
-      window.ssThumbFail = function(img) {
-        if (!img.src.includes('/proxy/')) {
-          img.onerror = function() {
-            document.getElementById('ss-thumb-loading').style.display = 'none';
-            document.getElementById('ss-thumb-fallback').style.display = 'flex';
-            img.style.display = 'none';
-          };
-          img.src = '/proxy/screenshot?url=' + encodeURIComponent('{{ unified.screenshot_url }}');
-        }
-      };
-      </script>
-      {% endif %}
-
-      {# ── Tech stack ── #}
-      {% if unified.technologies %}
-      <div style="margin-bottom:10px">
-        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
-                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Technologies</div>
-        <div style="display:flex;flex-wrap:wrap;gap:5px">
-          {% for tech in unified.technologies[:15] %}
-          <span style="font-size:11px;padding:2px 9px;background:var(--bg3);
-                       border-radius:4px;border:1px solid var(--border2);color:var(--text2)">
-            {{ tech }}
-          </span>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      {# ── Security headers ── #}
-      {% set _us_src = sources.get('urlscan',{}) %}
-      {% if _us_src.get('security_headers') %}
-      <div style="margin-bottom:10px">
-        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
-                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Security Headers</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px">
-          {% for hdr in _us_src.get('security_headers',{}).keys() %}
-          <span style="font-size:10px;padding:2px 7px;background:rgba(68,221,187,0.08);
-                       border-radius:4px;border:1px solid rgba(68,221,187,0.2);
-                       color:var(--teal);font-family:'Space Mono',monospace">
-            {{ hdr.replace('content-security-policy','CSP').replace('strict-transport-security','HSTS').replace('x-frame-options','X-Frame').replace('x-content-type-options','X-CTO') }}
-          </span>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      {# ── Web stats ── #}
-      {% set _ws = _us_src.get('web_stats',{}) %}
-      {% if _ws %}
-      <div style="margin-bottom:10px;display:flex;gap:16px;flex-wrap:wrap">
-        {% if _ws.get('uniq_ips') %}
-        <div style="text-align:center">
-          <div style="font-size:18px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('uniq_ips') }}</div>
-          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Unique IPs</div>
-        </div>
-        {% endif %}
-        {% if _ws.get('total_links') %}
-        <div style="text-align:center">
-          <div style="font-size:18px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('total_links') }}</div>
-          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Links</div>
-        </div>
-        {% endif %}
-        {% if _ws.get('total_cookies') %}
-        <div style="text-align:center">
-          <div style="font-size:18px;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text)">{{ _ws.get('total_cookies') }}</div>
-          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Cookies</div>
-        </div>
-        {% endif %}
-        {% if _ws.get('benign_votes') or _ws.get('malicious_votes') %}
-        <div style="text-align:center">
-          <div style="font-size:13px;font-weight:700;font-family:'Outfit',sans-serif">
-            <span style="color:var(--v-clean)">{{ _ws.get('benign_votes',0) }}✓</span>
-            <span style="color:var(--text3);font-size:11px"> / </span>
-            <span style="color:var(--v-malicious)">{{ _ws.get('malicious_votes',0) }}✗</span>
-          </div>
-          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Community</div>
-        </div>
-        {% endif %}
-        {% if _ws.get('server_ip') %}
-        <div>
-          <div style="font-size:12px;font-family:'Space Mono',monospace;color:var(--text2)">{{ _ws.get('server_ip') }}</div>
-          <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.08em;text-transform:uppercase">Server IP</div>
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {# ── TLS certificate ── #}
-      {% if _us_src.get('tls') %}
-      {% set _tls = _us_src.get('tls',{}) %}
-      <div style="margin-bottom:10px;padding:8px 10px;background:rgba(68,221,187,0.06);
-                  border-radius:6px;border:1px solid rgba(68,221,187,0.15)">
-        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.1em;
-                    text-transform:uppercase;color:var(--teal);margin-bottom:4px">🔒 TLS Certificate</div>
-        <div style="font-size:12px;color:var(--text2)">
-          {% if _tls.get('issuer') %}{{ _tls.get('issuer') }}{% endif %}
-          {% if _tls.get('valid_to') %} · expires {{ _tls.get('valid_to','')[:10] }}{% endif %}
-          {% if _tls.get('count') and _tls.get('count') > 1 %} · {{ _tls.get('count') }} certs{% endif %}
-        </div>
-      </div>
-      {% endif %}
-
-      {# ── Redirect chain ── #}
-      {% if unified.redirects %}
-      <div>
-        <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;
-                    text-transform:uppercase;color:var(--text3);margin-bottom:6px">Redirect chain</div>
-        <div style="font-size:11px;font-family:'Space Mono',monospace;
-                    color:var(--text3);line-height:2;overflow-wrap:break-word">
-          {% for r in unified.redirects[:5] %}
-          <span style="color:var(--text2)">{{ r[:75] }}{% if r|length > 75 %}…{% endif %}</span>
-          {% if not loop.last %}<span style="color:var(--accent)"> → </span>{% endif %}
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-    </div>
-    {% endif %}
-    {% endif %}
 
     {# ── SECTION 3: TIMELINE ── #}
     <div class="section-card anim-fade-up anim-delay-3">
@@ -526,7 +343,7 @@
         <button class="tab-btn" onclick="switchTab('tab-cve',this)">CVEs</button>
         {% endif %}
         {# Web Analysis tab — shows for domain/url with URLScan data #}
-        {% if ioc.type.value in ['domain','url'] and sources.get('urlscan',{}).get('status') == 'ok' %}
+        {% if ioc.type.value in ['domain','url'] and (sources.get('urlscan',{}).get('status') == 'ok' or sources.get('urlquery',{}).get('status') == 'ok') %}
         <button class="tab-btn" onclick="switchTab('tab-webanalysis',this)">Web Analysis</button>
         {% endif %}
       </div>
@@ -1111,7 +928,7 @@
       {% endif %}
 
       {# ══ TAB: WEB ANALYSIS ══ #}
-      {% if ioc.type.value in ['domain','url'] and sources.get('urlscan',{}).get('status') == 'ok' %}
+      {% if ioc.type.value in ['domain','url'] and (sources.get('urlscan',{}).get('status') == 'ok' or sources.get('urlquery',{}).get('status') == 'ok') %}
       {% set _us = sources.get('urlscan',{}) %}
       <div class="tab-panel" id="tab-webanalysis">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
@@ -1205,6 +1022,95 @@
           </div>
         </div>
         {% endif %}
+
+        {# ── HTTP Transactions (URLScan) ────────────────────── #}
+        {% set _http_txns = _us.get('http_txns') or [] %}
+        {% if _http_txns %}
+        <div style="margin-bottom:16px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+            HTTP Transactions ({{ _http_txns|length }})
+          </div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:11px;font-family:'Space Mono',monospace">
+              <thead>
+                <tr style="color:var(--text3);text-align:left;border-bottom:1px solid var(--border)">
+                  <th style="padding:4px 8px;font-weight:500;width:45px">Method</th>
+                  <th style="padding:4px 8px;font-weight:500;width:40px">Status</th>
+                  <th style="padding:4px 8px;font-weight:500">URL</th>
+                  <th style="padding:4px 8px;font-weight:500;width:100px">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for txn in _http_txns[:15] %}
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.04);{% if txn.status >= 400 %}background:rgba(255,85,85,0.04){% endif %}">
+                  <td style="padding:4px 8px;color:{% if txn.method == 'POST' %}var(--accent){% else %}var(--text3){% endif %}">{{ txn.method }}</td>
+                  <td style="padding:4px 8px;color:{% if txn.status >= 400 %}var(--v-malicious){% elif txn.status >= 300 %}var(--v-suspicious){% else %}var(--v-clean){% endif %}">{{ txn.status }}</td>
+                  <td style="padding:4px 8px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;max-width:260px;white-space:nowrap" title="{{ txn.url }}">{{ txn.url }}</td>
+                  <td style="padding:4px 8px;color:var(--text3)">{{ txn.ctype }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        {# ── URLQuery Alerts ──────────────────────────────────── #}
+        {% set _uq      = sources.get('urlquery', {}) %}
+        {% set _uq_alerts    = _uq.get('uq_alerts') or [] %}
+        {% set _uq_ids_alerts= _uq.get('ids_alerts') or [] %}
+        {% if _uq_alerts or _uq_ids_alerts %}
+        <div style="margin-bottom:16px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+            URLQuery Detections
+          </div>
+          {% for alert in _uq_alerts %}
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:4px;background:var(--bg3);border-radius:5px;border-left:3px solid {% if alert.severity == 'high' or alert.severity == 'critical' %}var(--v-malicious){% elif alert.severity == 'medium' %}var(--v-suspicious){% else %}var(--border){% endif %}">
+            <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,170,68,0.15);color:var(--v-suspicious);text-transform:uppercase;white-space:nowrap">{{ alert.type }}</span>
+            <span style="font-size:11px;color:var(--text2);font-family:'Space Mono',monospace">{{ alert.alert }}</span>
+            <span style="margin-left:auto;font-size:9px;color:var(--text3)">{{ alert.severity }}</span>
+          </div>
+          {% endfor %}
+          {% for alert in _uq_ids_alerts[:6] %}
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:4px;background:var(--bg3);border-radius:5px;border-left:3px solid var(--v-malicious)">
+            <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(255,85,85,0.15);color:var(--v-malicious);text-transform:uppercase;white-space:nowrap">IDS</span>
+            <span style="font-size:11px;color:var(--text2);font-family:'Space Mono',monospace">{{ alert.alert }}</span>
+            <span style="margin-left:auto;font-size:9px;color:var(--text3)">{{ alert.severity }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Detected URLs (URLQuery) ─────────────────────────── #}
+        {% set _det_urls = _uq.get('detected_urls') or [] %}
+        {% if _det_urls %}
+        <div style="margin-bottom:16px">
+          <div style="font-size:10px;font-family:'Space Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">
+            URLs Detected by URLQuery ({{ _det_urls|length }})
+          </div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:11px;font-family:'Space Mono',monospace">
+              <thead>
+                <tr style="color:var(--text3);border-bottom:1px solid var(--border)">
+                  <th style="padding:3px 8px;font-weight:500;width:45px;text-align:left">M</th>
+                  <th style="padding:3px 8px;font-weight:500;width:40px;text-align:left">St</th>
+                  <th style="padding:3px 8px;font-weight:500;text-align:left">URL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for u in _det_urls[:15] %}
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                  <td style="padding:3px 8px;color:var(--text3)">{{ u.method }}</td>
+                  <td style="padding:3px 8px;color:{% if u.status >= 400 %}var(--v-malicious){% elif u.status >= 300 %}var(--v-suspicious){% else %}var(--v-clean){% endif %}">{{ u.status }}</td>
+                  <td style="padding:3px 8px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;max-width:280px;white-space:nowrap" title="{{ u.url }}">{{ u.url }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
       </div>
       {% endif %}
 

@@ -355,6 +355,37 @@ class URLScanConnector(BaseConnector):
         if sec_headers:
             raw["_security_headers"] = sec_headers
 
+        # ── HTTP Transactions ─────────────────────────────────────
+        http_txns = []
+        all_requests = detail.get("data", {}).get("requests", []) or []
+        for req in all_requests[:20]:
+            rq   = req.get("request",  {}).get("request",  {}) or {}
+            rsp  = req.get("response", {}).get("response", {}) or {}
+            url  = rq.get("url") or req.get("request", {}).get("url", "")
+            meth = rq.get("method", "GET")
+            stat = rsp.get("status", 0)
+            hdrs_r = rsp.get("headers") or {}
+            # Content-Type: handle both dict and list formats
+            if isinstance(hdrs_r, dict):
+                ctype = hdrs_r.get("content-type") or hdrs_r.get("Content-Type") or ""
+            elif isinstance(hdrs_r, list):
+                ctype = next((h.get("value","") for h in hdrs_r
+                              if h.get("name","").lower() == "content-type"), "")
+            else:
+                ctype = ""
+            size   = (req.get("response", {}).get("dataLength") or
+                      req.get("response", {}).get("bodySize") or 0)
+            if url:
+                http_txns.append({
+                    "method":  meth,
+                    "url":     url[:200],
+                    "status":  stat,
+                    "ctype":   ctype.split(";")[0].strip()[:40],
+                    "size":    size,
+                })
+        if http_txns:
+            raw["_http_txns"] = http_txns
+
         # ── Redirect chain ────────────────────────────────────────
         result.redirects = []
         seen_locs = set()

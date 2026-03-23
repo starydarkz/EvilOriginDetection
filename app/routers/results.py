@@ -123,6 +123,8 @@ async def _results_page_inner(
                 _lists = raw_us.get("_lists") or {}
                 if _lists.get("linkDomains"):
                     norm["link_domains"] = _lists["linkDomains"]
+                if raw_us.get("_http_txns"):
+                    norm["http_txns"] = raw_us["_http_txns"]
                 if not norm.get("screenshot_url"):
                     uuid_us = None
                     # Try multiple sources for the UUID
@@ -158,6 +160,21 @@ async def _results_page_inner(
                         norm["screenshot_url"] = f"https://urlscan.io/screenshots/{uuid_us}.png"
             except Exception:
                 pass
+        # URLQuery: extract enriched fields from raw_json
+        if sr.source == "urlquery":
+            try:
+                raw_uq = json.loads(sr.raw_json or "{}")
+                if raw_uq.get("_detected_urls"):
+                    norm["detected_urls"] = raw_uq["_detected_urls"]
+                if raw_uq.get("_uq_alerts"):
+                    norm["uq_alerts"] = raw_uq["_uq_alerts"]
+                if raw_uq.get("_ids_alerts"):
+                    norm["ids_alerts"] = raw_uq["_ids_alerts"]
+                if raw_uq.get("_file_hashes"):
+                    norm["file_hashes"] = raw_uq["_file_hashes"]
+            except Exception:
+                pass
+
         sources[sr.source] = {
             "status":     sr.status.value,
             "fetched_at": sr.fetched_at.isoformat() if sr.fetched_at else None,
