@@ -119,20 +119,72 @@ class URLQueryConnector(BaseConnector):
 
             # ── Step 2: Search historical reports ─────────────────
             try:
+                # Search 1: by domain/value - get more results
                 s = await c.get(
                     f"{BASE}/public/v1/search/reports/",
-                    params={"query": query_val, "limit": 6},
+                    params={"query": query_val, "limit": 10},
                     headers=headers,
                 )
                 if s.status_code == 200:
                     search_data = s.json()
                     result["_search"] = search_data
+
+                    # Search 2: look specifically for Telegram/malware reports
+                    # Try with detection filter
+                    all_reports = list(search_data.get("reports") or [])
+                    try:
+                        s2 = await c.get(
+                            f"{BASE}/public/v1/search/reports/",
+                            params={"query": query_val, "limit": 10,
+                                    "detection": "malware"},
+                            headers=headers,
+                        )
+                        if s2.status_code == 200:
+                            d2 = s2.json()
+                            extra = d2.get("reports") or []
+                            # Add any new report IDs not already in list
+                            existing_ids = {r.get("report_id") for r in all_reports}
+                            for rep in extra:
+                                if rep.get("report_id") not in existing_ids:
+                                    all_reports.append(rep)
+                                    existing_ids.add(rep.get("report_id"))
+                            from app.logger import app_logger
+                            app_logger.info(
+                                f"[urlquery] detection=malware search: "
+                                f"status={s2.status_code} "
+                                f"extra_reports={len(extra)} "
+                                f"new_added={len(all_reports)-len(search_data.get('reports') or [])}"
+                            )
+                    except Exception as _s2e:
+                        try:
+                            from app.logger import app_logger
+                            app_logger.info(f"[urlquery] detection search skipped: {_s2e}")
+                        except Exception: pass
+
+                    # Also log each report's detection field to find Telegram
+                    try:
+                        from app.logger import app_logger
+                        for i, rep in enumerate(all_reports[:6]):
+                            det = rep.get("detection") or {}
+                            tags = rep.get("tags") or []
+                            app_logger.info(
+                                f"[urlquery] report[{i}] id={rep.get('report_id','?')[:8]} "
+                                f"tags={tags[:4]} "
+                                f"detection_keys={list(det.keys())[:5] if isinstance(det, dict) else det}"
+                            )
+                    except Exception: pass
+
+                    # Use combined reports list
+                    search_data = dict(search_data)
+                    search_data["reports"] = all_reports
+                    result["_search"] = search_data
+
                     try:
                         from app.logger import app_logger
                         app_logger.info(
                             f"[urlquery] search status={s.status_code} "
                             f"total_hits={search_data.get('total_hits',0)} "
-                            f"reports={len(search_data.get('reports',[]))}"
+                            f"reports={len(all_reports)}"
                         )
                     except Exception:
                         pass
@@ -262,10 +314,49 @@ class URLQueryConnector(BaseConnector):
             return
 
         # Grab metadata from the latest report overview
-        latest   = reports[0]
+        # Find the report with the richest detection data
+        # Sort by: has telegram > has detection data > most recent
+        def _rep_score(r):
+            det = r.get("detection") or {}
+            tags = r.get("tags") or []
+            tag_str = " ".join(str(t).lower() for t in tags)
+            det_str = str(det).lower()
+            if "telegram" in tag_str or "telegram" in det_str:
+                return 100
+            if det:
+                return 10
+            return 0
+
+        reports_sorted = sorted(reports, key=_rep_score, reverse=True)
+        latest = reports_sorted[0]
+
+        try:
+            from app.logger import app_logger
+            app_logger.info(
+                f"[urlquery] best_search_report: id={latest.get('report_id','?')[:8]} "
+                f"score={_rep_score(latest)} "
+                f"tags={latest.get('tags',[])} "
+                f"detection_keys={list((latest.get('detection') or {}).keys())[:6]}"
+            )
+        except Exception: pass
+
         page_ip  = (latest.get("ip") or {}).get("addr")
         page_url = (latest.get("url") or {}).get("fqdn") or raw.get("_ioc")
         rep_date = latest.get("date", "")[:10]
+
+        # Try to extract Telegram data from search result detection field
+        # (in case full report doesn't have sensors)
+        detection_field = latest.get("detection") or {}
+        if isinstance(detection_field, dict):
+            for key, val in detection_field.items():
+                if "telegram" in key.lower() or (isinstance(val, dict) and val.get("token")):
+                    try:
+                        from app.logger import app_logger
+                        app_logger.info(
+                            f"[urlquery] detection field has telegram: "
+                            f"key={key!r} val_keys={list(val.keys()) if isinstance(val, dict) else val}"
+                        )
+                    except Exception: pass
 
         # ── Tags from alerts and verdict ───────────────────────
         tags = []
