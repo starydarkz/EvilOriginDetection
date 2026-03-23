@@ -121,7 +121,7 @@ class URLQueryConnector(BaseConnector):
             try:
                 s = await c.get(
                     f"{BASE}/public/v1/search/reports/",
-                    params={"query": query_val, "limit": 3},
+                    params={"query": query_val, "limit": 6},
                     headers=headers,
                 )
                 if s.status_code == 200:
@@ -157,7 +157,9 @@ class URLQueryConnector(BaseConnector):
                             )
                             if r2.status_code == 200:
                                 data = r2.json()
-                                sensors = data.get("sensors") or {}
+                                # sensors at top level OR inside 'final'
+                                sensors = (data.get("sensors") or
+                                           (data.get("final") or {}).get("sensors") or {})
                                 uq_sens = sensors.get("urlquery") or []
                                 ids_sens = sensors.get("ids") or []
                                 # Score: telegram=100, other uq alerts=10, ids=5, just data=1
@@ -177,9 +179,11 @@ class URLQueryConnector(BaseConnector):
                                     score += len(alerts_list) * 2
                                 try:
                                     from app.logger import app_logger
+                                    final_keys = list((data.get("final") or {}).keys())[:6]
                                     app_logger.info(
                                         f"[urlquery] report {rid} score={score} "
                                         f"uq={len(uq_sens)} ids={len(ids_sens)} "
+                                        f"final_keys={final_keys} "
                                         f"alerts={[a.get('alert','?')[:40] for a in uq_sens[:2]]}"
                                     )
                                 except Exception: pass
@@ -277,7 +281,19 @@ class URLQueryConnector(BaseConnector):
         # ── IDS alerts from full report ────────────────────────
         ids_alerts = []
         if full_rep:
-            sensors = full_rep.get("sensors") or {}
+            # sensors can be at top level OR nested inside 'final'
+            sensors = (full_rep.get("sensors") or
+                       (full_rep.get("final") or {}).get("sensors") or {})
+            try:
+                from app.logger import app_logger
+                final_keys = list((full_rep.get("final") or {}).keys())[:8]
+                app_logger.info(
+                    f"[urlquery] sensors_lookup: top={bool(full_rep.get('sensors'))} "
+                    f"final_keys={final_keys} "
+                    f"sensors_keys={list(sensors.keys())} "
+                    f"uq_count={len(sensors.get('urlquery') or [])}"
+                )
+            except Exception: pass
             for ids_sensor in (sensors.get("ids") or []):
                 for alert in (ids_sensor.get("alerts") or [])[:4]:
                     ids_alerts.append({
