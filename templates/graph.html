@@ -206,6 +206,8 @@ let cy = null;
 let panelOpen = true;
 let graphReadyPromise = null;
 const loadedIOCs = new Set();  // track which IOC ids are already in graph
+const iocArtifacts = new Map();
+const iocCentralNodes = new Map();
 
 // ── Init Cytoscape ────────────────────────────────────────────────────
 function initGraph() {
@@ -397,6 +399,7 @@ async function addIOCToGraph() {
     }
 
     const iocId = String(analyzeData.ioc_id);
+    const centralNodeId = `ioc_${iocId}`;
 
     // Remove loading node
     if (cy) cy.remove(`#${tempId}`);
@@ -429,6 +432,7 @@ async function addIOCToGraph() {
           cy.add({ data: { ...e.data, id: edgeId } });
         }
       });
+      indexIOCArtifacts(iocId, centralNodeId, gData);
 
       // Find cross-IOC correlations if >1 IOC loaded
       if (loadedIOCs.size > 1) {
@@ -454,9 +458,86 @@ async function addIOCToGraph() {
 
 // ── Fetch correlations between loaded IOCs ────────────────────────────
 async function fetchCorrelations(newIocId) {
-  // For each existing IOC already in graph, check correlations
-  // This is a best-effort client-side merge — server does the real work
-  // Future: implement a /correlate endpoint that accepts multiple IOC ids
+  const newArtifacts = iocArtifacts.get(String(newIocId));
+  const newCentral = iocCentralNodes.get(String(newIocId));
+  if (!cy || !newArtifacts || !newCentral) return;
+
+  let added = 0;
+  for (const [otherIocId, otherArtifacts] of iocArtifacts.entries()) {
+    if (String(otherIocId) === String(newIocId)) continue;
+    const otherCentral = iocCentralNodes.get(String(otherIocId));
+    if (!otherCentral) continue;
+
+    const shared = [];
+    for (const [key, artifact] of newArtifacts.entries()) {
+      if (otherArtifacts.has(key)) shared.push(artifact);
+    }
+    if (!shared.length) continue;
+
+    const source = otherCentral < newCentral ? otherCentral : newCentral;
+    const target = otherCentral < newCentral ? newCentral : otherCentral;
+    const edgeId = `corr_${source}_${target}`;
+    const score = Math.min(100, 35 + shared.length * 15);
+    const label = shared.length === 1
+      ? `shared ${shared[0].type}: ${shared[0].label}`
+      : `${shared.length} shared artifacts`;
+
+    if (cy.getElementById(edgeId).length) {
+      const edge = cy.getElementById(edgeId);
+      edge.data('score', Math.max(edge.data('score') || 0, score));
+      edge.data('label', label);
+      edge.data('shared', shared.slice(0, 12));
+      continue;
+    }
+
+    cy.add({
+      group: 'edges',
+      data: {
+        id: edgeId,
+        source,
+        target,
+        label,
+        type: 'correlation',
+        score,
+        shared: shared.slice(0, 12),
+      },
+      classes: 'correlation',
+    });
+    added += 1;
+  }
+
+  if (added) {
+    showStatus(`Added ${added} cross-IOC correlation${added === 1 ? '' : 's'}`);
+  }
+}
+
+function indexIOCArtifacts(iocId, centralNodeId, gData) {
+  const artifacts = new Map();
+  const central = (gData.nodes || []).find(n => n.data?.central) || null;
+  iocCentralNodes.set(String(iocId), central?.data?.id || centralNodeId);
+
+  (gData.nodes || []).forEach(n => {
+    const d = n.data || {};
+    if (!d.id || d.central) return;
+    const key = artifactKey(d);
+    if (!key) return;
+    artifacts.set(key, {
+      id: d.id,
+      label: d.label || d.id,
+      type: d.type || 'unknown',
+      source: d.source || '',
+      reason: d.reason || '',
+    });
+  });
+
+  iocArtifacts.set(String(iocId), artifacts);
+}
+
+function artifactKey(d) {
+  const type = String(d.type || '').toLowerCase();
+  const label = String(d.label || '').trim().toLowerCase();
+  if (!label || d.central) return '';
+  return `${type}:${label}`;
 }
 
 // ── Node tap handler ──────────────────────────────────────────────────
@@ -628,6 +709,8 @@ function expandNode(nodeId) {
 function clearGraph() {
   if (cy) cy.elements().remove();
   loadedIOCs.clear();
+  iocArtifacts.clear();
+  iocCentralNodes.clear();
   clearPanel();
   document.getElementById('empty-state').style.display = 'flex';
 }
