@@ -420,6 +420,11 @@ async function addIOCToGraph() {
     }
 
     if (cy && Array.isArray(gData.nodes)) {
+      const centralNode = gData.nodes.find(n => n.data?.central);
+      const existingArtifactNode = centralNode
+        ? findNodeByIdentity(centralNode.data, centralNode.data.id)
+        : null;
+
       // Add new nodes (skip existing)
       gData.nodes.forEach(n => {
         if (!cy.getElementById(n.data.id).length) {
@@ -432,6 +437,11 @@ async function addIOCToGraph() {
           cy.add({ data: { ...e.data, id: edgeId } });
         }
       });
+
+      if (existingArtifactNode && centralNode) {
+        addExpansionEdge(existingArtifactNode.id(), centralNode.data.id, centralNode.data.label);
+      }
+
       indexIOCArtifacts(iocId, centralNodeId, gData);
 
       // Find cross-IOC correlations if >1 IOC loaded
@@ -516,6 +526,19 @@ function indexIOCArtifacts(iocId, centralNodeId, gData) {
   const central = (gData.nodes || []).find(n => n.data?.central) || null;
   iocCentralNodes.set(String(iocId), central?.data?.id || centralNodeId);
 
+  if (central?.data) {
+    const centralKey = nodeIdentityKey(central.data);
+    if (centralKey) {
+      artifacts.set(centralKey, {
+        id: central.data.id,
+        label: central.data.label || central.data.id,
+        type: central.data.type || 'unknown',
+        source: 'input',
+        reason: 'searched IOC',
+      });
+    }
+  }
+
   (gData.nodes || []).forEach(n => {
     const d = n.data || {};
     if (!d.id || d.central) return;
@@ -534,10 +557,41 @@ function indexIOCArtifacts(iocId, centralNodeId, gData) {
 }
 
 function artifactKey(d) {
+  return nodeIdentityKey(d);
+}
+
+function nodeIdentityKey(d) {
   const type = String(d.type || '').toLowerCase();
   const label = String(d.label || '').trim().toLowerCase();
-  if (!label || d.central) return '';
+  if (!label) return '';
   return `${type}:${label}`;
+}
+
+function findNodeByIdentity(data, excludeId='') {
+  const key = nodeIdentityKey(data);
+  if (!key || !cy) return null;
+  const matches = cy.nodes().filter(n =>
+    n.id() !== excludeId && nodeIdentityKey(n.data()) === key
+  );
+  return matches.length ? matches[0] : null;
+}
+
+function addExpansionEdge(existingNodeId, newCentralId, label) {
+  if (!cy || !existingNodeId || !newCentralId || existingNodeId === newCentralId) return;
+  const edgeId = `expand_${existingNodeId}_${newCentralId}`;
+  if (cy.getElementById(edgeId).length) return;
+  cy.add({
+    group: 'edges',
+    data: {
+      id: edgeId,
+      source: existingNodeId,
+      target: newCentralId,
+      label: `expanded as IOC${label ? ': ' + label : ''}`,
+      type: 'correlation',
+      score: 85,
+    },
+    classes: 'correlation',
+  });
 }
 
 // ── Node tap handler ──────────────────────────────────────────────────
@@ -548,22 +602,7 @@ async function onNodeTap(evt) {
   node.select();
   renderPanel(d);
 
-  // Lazy expand: load artifacts for non-central nodes on click
-  if (!d.central && !d.expanded && d.iocId) {
-    node.data('expanded', true);
-    try {
-      const resp  = await fetch(`/results/${d.iocId}/graph`);
-      const gData = await resp.json();
-      gData.nodes.forEach(n => {
-        if (!cy.getElementById(n.data.id).length) cy.add(n);
-      });
-      gData.edges.forEach(e => {
-        const edgeId = `e_${e.data.source}_${e.data.target}`;
-        if (!cy.getElementById(edgeId).length) cy.add({ data: { ...e.data, id: edgeId } });
-      });
-      relayout();
-    } catch(e) { /* silent */ }
-  }
+  // Expansion is explicit through the panel button.
 }
 
 // ── Edge hover handler ────────────────────────────────────────────────
@@ -691,18 +730,16 @@ function togglePanel() {
 // ── Graph actions ─────────────────────────────────────────────────────
 function analyzeNode(label, type) {
   const prefix = { ip:'ip=', domain:'domain=', hash:'hash=', url:'url=', email:'mail=' }[type] || '';
-  const form   = document.createElement('form');
-  form.method  = 'POST'; form.action = '/analyze';
-  const inp    = document.createElement('input');
-  inp.type = 'hidden'; inp.name = 'ioc_input'; inp.value = prefix + label;
-  form.appendChild(inp); document.body.appendChild(form); form.submit();
+  document.getElementById('graph-ioc-input').value = prefix + label;
+  addIOCToGraph();
 }
 
 function expandNode(nodeId) {
   const node = cy.getElementById(nodeId);
   if (node.length) {
     node.data('expanded', true);
-    onNodeTap({ target: node });
+    const d = node.data();
+    analyzeNode(d.label || d.id, d.type || '');
   }
 }
 
