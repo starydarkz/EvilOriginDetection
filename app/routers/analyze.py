@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -324,3 +324,52 @@ async def analyze(
         url=f"/results/{ioc.id}",
         status_code=303,
     )
+
+
+@router.post("/api/analyze", response_class=JSONResponse)
+async def analyze_api(
+    request:      Request,
+    ioc_input:    str  = Form(...),
+    force_rescan: bool = Form(False),
+    db:           AsyncSession = Depends(get_db),
+):
+    t0     = time.monotonic()
+    parsed = parse_input(ioc_input)
+
+    if not parsed:
+        return JSONResponse(
+            {"error": "No valid IOCs detected. Check your input format."},
+            status_code=400,
+        )
+
+    target = parsed[0]
+
+    try:
+        ioc, _ = await analyze_single(
+            target, db, force_rescan=force_rescan
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        exc_logger.error(f"analyze_api failed for {target.value!r}:\n{tb}")
+        app_logger.error(f"500 on /api/analyze — {type(e).__name__}: {e}")
+        raise
+
+    response_ms = int((time.monotonic() - t0) * 1000)
+    log_query(
+        request       = request,
+        ioc_value     = target.value,
+        ioc_type      = target.type.value,
+        verdict       = ioc.verdict.value if ioc.verdict else None,
+        forced_rescan = force_rescan,
+        response_ms   = response_ms,
+    )
+
+    return {
+        "ioc_id": ioc.id,
+        "value": ioc.value,
+        "type": ioc.type.value,
+        "verdict": ioc.verdict.value if ioc.verdict else None,
+        "score": ioc.score,
+        "result_url": f"/results/{ioc.id}",
+        "graph_url": f"/results/{ioc.id}/graph",
+    }

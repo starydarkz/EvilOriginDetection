@@ -342,14 +342,18 @@ async function addIOCToGraph() {
   document.getElementById('empty-state').style.display = 'none';
 
   try {
-    const resp = await fetch('/analyze', { method:'POST', body: form, redirect:'manual' });
-    // Redirect location contains /results/{id}
-    const location = resp.headers.get('location') || resp.url || '';
-    const match    = location.match(/\/results\/(\d+)/);
+    const resp = await fetch('/api/analyze', { method:'POST', body: form });
+    const analyzeData = await resp.json().catch(() => ({}));
 
-    if (!match) throw new Error('No result ID from analyze');
+    if (!resp.ok) {
+      throw new Error(analyzeData.error || `Analyze failed (${resp.status})`);
+    }
 
-    const iocId = match[1];
+    if (!analyzeData.ioc_id) {
+      throw new Error('No result ID from analyze API');
+    }
+
+    const iocId = String(analyzeData.ioc_id);
 
     // Remove loading node
     if (cy) cy.remove(`#${tempId}`);
@@ -361,7 +365,7 @@ async function addIOCToGraph() {
     loadedIOCs.add(iocId);
 
     // Fetch graph data
-    const gResp = await fetch(`/results/${iocId}/graph`);
+    const gResp = await fetch(analyzeData.graph_url || `/results/${iocId}/graph`);
     const gData = await gResp.json();
 
     if (cy && gData.nodes) {
