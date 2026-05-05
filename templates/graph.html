@@ -79,6 +79,14 @@
   color:var(--text3); pointer-events:none;
 }
 .graph-empty-icon { font-size:48px; opacity:0.15; }
+.graph-status {
+  position:absolute; top:14px; left:14px; z-index:20;
+  background:var(--surface-solid); border:0.5px solid var(--border);
+  border-radius:6px; padding:7px 10px;
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color:var(--text2); display:none;
+  box-shadow:0 2px 12px rgba(0,0,0,0.25);
+}
 
 /* Minimap placeholder style */
 #minimap {
@@ -156,6 +164,7 @@ body.light #minimap { background:rgba(240,241,248,0.85); }
           You can add multiple IOCs to find relationships between them.
         </div>
       </div>
+      <div class="graph-status" id="graph-status"></div>
 
       <!-- Zoom controls -->
       <div class="graph-controls">
@@ -191,13 +200,34 @@ body.light #minimap { background:rgba(240,241,248,0.85); }
 // ── State ─────────────────────────────────────────────────────────────
 let cy = null;
 let panelOpen = true;
+let graphReadyPromise = null;
 const loadedIOCs = new Set();  // track which IOC ids are already in graph
 
 // ── Init Cytoscape ────────────────────────────────────────────────────
 function initGraph() {
-  const script = document.createElement('script');
-  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js';
-  script.onload = () => {
+  graphReadyPromise = new Promise((resolve, reject) => {
+    if (window.cytoscape) {
+      createGraph();
+      resolve(cy);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js';
+    script.onload = () => {
+      createGraph();
+      resolve(cy);
+    };
+    script.onerror = () => {
+      const err = new Error('Could not load graph renderer');
+      showPanelMessage(err.message);
+      showStatus(err.message, true);
+      reject(err);
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function createGraph() {
     cy = cytoscape({
       container: document.getElementById('cy'),
       elements:  [],
@@ -223,8 +253,14 @@ function initGraph() {
     cy.on('tap', evt => {
       if (evt.target === cy) clearPanel();
     });
-  };
-  document.head.appendChild(script);
+    showStatus('Graph ready');
+    setTimeout(hideStatus, 1200);
+}
+
+async function ensureGraphReady() {
+  if (cy) return cy;
+  if (!graphReadyPromise) initGraph();
+  return graphReadyPromise;
 }
 
 // ── Style builder ─────────────────────────────────────────────────────
@@ -342,6 +378,9 @@ async function addIOCToGraph() {
   document.getElementById('empty-state').style.display = 'none';
 
   try {
+    showStatus(`Analyzing ${raw}...`);
+    await ensureGraphReady();
+
     const resp = await fetch('/api/analyze', { method:'POST', body: form });
     const analyzeData = await resp.json().catch(() => ({}));
 
@@ -365,10 +404,15 @@ async function addIOCToGraph() {
     loadedIOCs.add(iocId);
 
     // Fetch graph data
+    showStatus(`Loading graph for ${analyzeData.value || raw}...`);
     const gResp = await fetch(analyzeData.graph_url || `/results/${iocId}/graph`);
     const gData = await gResp.json();
 
-    if (cy && gData.nodes) {
+    if (!gResp.ok || gData.error) {
+      throw new Error(gData.error || `Graph failed (${gResp.status})`);
+    }
+
+    if (cy && Array.isArray(gData.nodes)) {
       // Add new nodes (skip existing)
       gData.nodes.forEach(n => {
         if (!cy.getElementById(n.data.id).length) {
@@ -388,10 +432,16 @@ async function addIOCToGraph() {
       }
 
       relayout();
+      graphFit();
+      showStatus(`Added ${gData.nodes.length} nodes / ${gData.edges?.length || 0} edges`);
+      setTimeout(hideStatus, 1800);
+    } else {
+      throw new Error('Invalid graph response');
     }
   } catch(err) {
     if (cy) cy.remove(`#${tempId}`);
     console.error('Graph add error:', err);
+    showStatus(`Error: ${err.message}`, true);
     showPanelMessage(`Error loading IOC: ${err.message}`);
   }
 
@@ -502,6 +552,19 @@ function clearPanel() {
 function showPanelMessage(msg) {
   document.getElementById('panel-body').innerHTML =
     `<div style="font-size:11px;color:var(--v-suspicious)">${escHtml(msg)}</div>`;
+}
+
+function showStatus(message, isError=false) {
+  const el = document.getElementById('graph-status');
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = 'block';
+  el.style.color = isError ? '#e05c5c' : 'var(--text2)';
+}
+
+function hideStatus() {
+  const el = document.getElementById('graph-status');
+  if (el) el.style.display = 'none';
 }
 
 function togglePanel() {
