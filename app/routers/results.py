@@ -584,6 +584,12 @@ async def _graph_data_inner(ioc_id: int, db):
 
     nodes = []
     edges = []
+    debug = {
+        "ioc": ioc.value,
+        "sources": [],
+        "skipped_sources": [],
+        "relation_candidates": {},
+    }
 
     # Central node
     # Build extra info for hash nodes
@@ -670,16 +676,37 @@ async def _graph_data_inner(ioc_id: int, db):
         value = (value or "").strip()
         return "." in value and "@" not in value and not value.startswith("http")
 
+    def _status_value(status) -> str:
+        return getattr(status, "value", status)
+
     for sr in ioc.source_results:
-        if sr.status.value != "ok":
+        status_value = _status_value(sr.status)
+        if status_value != "ok":
+            debug["skipped_sources"].append({
+                "source": sr.source,
+                "status": status_value,
+            })
             continue
         try:
             norm = json.loads(sr.normalized or "{}")
             raw  = json.loads(sr.raw_json   or "{}")
         except Exception:
+            debug["skipped_sources"].append({
+                "source": sr.source,
+                "status": "invalid_json",
+            })
             continue
 
         src = sr.source
+        debug["sources"].append(src)
+        debug["relation_candidates"][src] = {
+            "hostnames": len(norm.get("hostnames") or []),
+            "related_iocs": len(norm.get("related_iocs") or []),
+            "passive_dns": len(norm.get("passive_dns") or []),
+            "associated_emails": len(raw.get("_associated_emails") or []),
+            "evidence": len((raw.get("ip", {}) or {}).get("evidence") or []),
+            "email_reports": norm.get("email_reports"),
+        }
 
         # ── Hostnames / PTR → domain nodes ────────────────────────
         for hostname in (norm.get("hostnames") or [])[:5]:
@@ -918,6 +945,24 @@ async def _graph_data_inner(ioc_id: int, db):
             evidence_entries = list(ip_data.get("evidence") or [])
             nb_ip = (raw.get("_nobadip", {}) or {}).get("ip", {}) or {}
             evidence_entries.extend(nb_ip.get("evidence") or [])
+            evidence_emails = []
+            seen_evidence_emails = set()
+            email_re = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+
+            for entry in evidence_entries:
+                if not isinstance(entry, dict):
+                    continue
+                for field in ("email", "username", "evidence", "comment"):
+                    val = str(entry.get(field) or "")
+                    for email in email_re.findall(val):
+                        email = email.strip().lower()
+                        if email not in seen_evidence_emails:
+                            seen_evidence_emails.add(email)
+                            evidence_emails.append({
+                                "email": email,
+                                "username": entry.get("username", ""),
+                                "date": entry.get("date"),
+                            })
 
             if spam_frequency:
                 try:
@@ -934,7 +979,9 @@ async def _graph_data_inner(ioc_id: int, db):
                     add_edge(central_id, nid, "reported-for-spam", "threat",
                              source_intel="stopforumspam")
 
-            for entry in (raw.get("_associated_emails") or [])[:8]:
+            associated_entries = list(raw.get("_associated_emails") or [])
+            associated_entries.extend(evidence_emails)
+            for entry in associated_entries[:12]:
                 email = entry.get("email", "")
                 if email and "@" in email:
                     nid = _safe_node_id("sfs_email", email)
@@ -1017,7 +1064,7 @@ async def _graph_data_inner(ioc_id: int, db):
                         add_edge(central_id, nid,
                                  rel.get("relationship", "related"),
                                  "threat", source_intel=src)
-    return {"nodes": nodes, "edges": edges}
+    return {"nodes": nodes, "edges": edges, "debug": debug}
 
 
 @router.post("/results/{ioc_id}/rescan")
