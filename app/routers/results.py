@@ -679,6 +679,12 @@ async def _graph_data_inner(ioc_id: int, db):
     def _status_value(status) -> str:
         return getattr(status, "value", status)
 
+    def _as_dict(value) -> dict:
+        return value if isinstance(value, dict) else {}
+
+    def _as_list(value) -> list:
+        return value if isinstance(value, list) else []
+
     for sr in ioc.source_results:
         status_value = _status_value(sr.status)
         if status_value != "ok":
@@ -699,12 +705,13 @@ async def _graph_data_inner(ioc_id: int, db):
 
         src = sr.source
         debug["sources"].append(src)
+        raw_ip_debug = _as_dict(raw.get("ip", {}))
         debug["relation_candidates"][src] = {
             "hostnames": len(norm.get("hostnames") or []),
             "related_iocs": len(norm.get("related_iocs") or []),
             "passive_dns": len(norm.get("passive_dns") or []),
             "associated_emails": len(raw.get("_associated_emails") or []),
-            "evidence": len((raw.get("ip", {}) or {}).get("evidence") or []),
+            "evidence": len(raw_ip_debug.get("evidence") or []),
             "email_reports": norm.get("email_reports"),
         }
 
@@ -782,7 +789,7 @@ async def _graph_data_inner(ioc_id: int, db):
 
         # ── VirusTotal relations ───────────────────────────────────
         if src == "virustotal":
-            relations = raw.get("_relations", {})
+            relations = _as_dict(raw.get("_relations", {}))
 
             # Resolutions: IP↔Domain — add each as a SEPARATE typed node
             # VT quirk: item.id sometimes = IPv6+hostname or IPv4+hostname concatenated
@@ -804,7 +811,8 @@ async def _graph_data_inner(ioc_id: int, db):
                 return item_id, ""
 
             for item in (relations.get("resolutions") or [])[:8]:
-                attr      = item.get("attributes", {}) or {}
+                item = _as_dict(item)
+                attr      = _as_dict(item.get("attributes", {}))
                 ip_addr   = (attr.get("ip_address") or "").strip()
                 host_name = (attr.get("host_name")  or "").strip()
                 item_id   = (item.get("id") or "").strip()
@@ -834,10 +842,11 @@ async def _graph_data_inner(ioc_id: int, db):
                 ("dropped_files",       "drops"),
             ]:
                 for item in (relations.get(rel_key) or [])[:4]:
+                    item = _as_dict(item)
                     fhash = item.get("id", "")
                     if fhash:
                         nid = f"vt_file_{fhash[:12]}"
-                        _item_attrs = item.get("attributes", {}) or {}
+                        _item_attrs = _as_dict(item.get("attributes", {}))
                         _mname = _item_attrs.get("meaningful_name") or None
                         _mf = _item_attrs.get("popular_threat_classification", {})
                         _mf = (_mf.get("suggested_threat_label") or "") if isinstance(_mf, dict) else ""
@@ -857,6 +866,7 @@ async def _graph_data_inner(ioc_id: int, db):
                 ("contacted_domains", "domain", "contacted"),
             ]:
                 for item in (relations.get(rel_key) or [])[:5]:
+                    item = _as_dict(item)
                     val = item.get("id", "")
                     if val:
                         nid = f"vt_{rel_key}_{val}"
@@ -869,6 +879,7 @@ async def _graph_data_inner(ioc_id: int, db):
         # ── Pulsedive linked indicators ────────────────────────────
         if src == "pulsedive":
             for linked_ioc in (raw.get("_linked_iocs") or [])[:5]:
+                linked_ioc = _as_dict(linked_ioc)
                 val  = linked_ioc.get("value", "")
                 ltyp = linked_ioc.get("type", "")
                 if val and ltyp in IOC_TYPES:
@@ -881,8 +892,10 @@ async def _graph_data_inner(ioc_id: int, db):
 
         # ── SecurityTrails — DNS A records ─────────────────────────
         if src == "securitytrails":
-            dns = norm.get("dns_records") or {}
-            for rec in (dns.get("a", {}).get("values", []) or [])[:4]:
+            dns = _as_dict(norm.get("dns_records") or {})
+            a_records = _as_dict(dns.get("a", {}))
+            for rec in (_as_list(a_records.get("values")) or [])[:4]:
+                rec = _as_dict(rec)
                 ip = rec.get("ip", "")
                 if ip:
                     nid = f"st_ip_{ip}"
@@ -906,6 +919,7 @@ async def _graph_data_inner(ioc_id: int, db):
         # ── WhatsMyName — usernames found ──────────────────────────
         if src == "whatsmyname":
             for hit in (norm.get("username_hits") or [])[:5]:
+                hit = _as_dict(hit)
                 site = hit.get("site", "")
                 url  = hit.get("url", "")
                 if url:
@@ -940,10 +954,10 @@ async def _graph_data_inner(ioc_id: int, db):
 
         # ── StopForumSpam — emails associated with this IP ───────
         if src == "stopforumspam":
-            ip_data = raw.get("ip", {}) or {}
+            ip_data = _as_dict(raw.get("ip", {}) or {})
             spam_frequency = norm.get("email_reports") or ip_data.get("frequency") or 0
             evidence_entries = list(ip_data.get("evidence") or [])
-            nb_ip = (raw.get("_nobadip", {}) or {}).get("ip", {}) or {}
+            nb_ip = _as_dict(_as_dict(raw.get("_nobadip", {}) or {}).get("ip", {}) or {})
             evidence_entries.extend(nb_ip.get("evidence") or [])
             evidence_emails = []
             seen_evidence_emails = set()
@@ -982,6 +996,7 @@ async def _graph_data_inner(ioc_id: int, db):
             associated_entries = list(raw.get("_associated_emails") or [])
             associated_entries.extend(evidence_emails)
             for entry in associated_entries[:12]:
+                entry = _as_dict(entry)
                 email = entry.get("email", "")
                 if email and "@" in email:
                     nid = _safe_node_id("sfs_email", email)
@@ -1016,7 +1031,7 @@ async def _graph_data_inner(ioc_id: int, db):
 
         # ── URLScan — IPs/domains contacted during scan ────────────
         if src == "urlscan":
-            lists = raw.get("_lists", {}) or {}
+            lists = _as_dict(raw.get("_lists", {}) or {})
             for ip in (lists.get("ips") or [])[:5]:
                 if ip:
                     nid = f"us_ip_{ip}"
@@ -1046,8 +1061,7 @@ async def _graph_data_inner(ioc_id: int, db):
         # ── ThreatFox / URLhaus — related IOCs ────────────────────
         if src in ("threatfox", "urlhaus"):
                 for rel in (raw.get("related_iocs") or [])[:6]:
-                    if not isinstance(rel, dict):
-                        continue
+                    rel = _as_dict(rel)
                     val   = (rel.get("value") or "").strip()
                     rtype = rel.get("type", "ip")
                     if not val or val == ioc.value:
