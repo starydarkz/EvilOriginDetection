@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import IOC, SourceResult, ScanHistory, Correlation
+from app.ioc_relations import extract_related_iocs
 from app.parser import ParsedIOC, IOCType
 
 router    = APIRouter()
@@ -704,6 +705,15 @@ async def _graph_data_inner(ioc_id: int, db):
             continue
 
         src = sr.source
+        related_iocs = extract_related_iocs(
+            src,
+            ioc.value,
+            ioc.type.value,
+            norm,
+            raw,
+        )
+        if related_iocs:
+            norm["related_iocs"] = related_iocs
         debug["sources"].append(src)
         raw_ip_debug = _as_dict(raw.get("ip", {}))
         debug["relation_candidates"][src] = {

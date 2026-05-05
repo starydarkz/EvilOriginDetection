@@ -21,6 +21,7 @@ from app.parser import parse_input, ParsedIOC
 from app.scoring import compute_score
 from app.correlator import run_correlation
 from app.connectors.base import NormalizedResult
+from app.ioc_relations import extract_related_iocs
 from app.logger import log_query, get_client_ip, app_logger, exc_logger
 import traceback
 from config import get_settings, pick_key
@@ -229,6 +230,15 @@ async def analyze_single(
 
     # Save source results (replace existing for this ioc)
     for r in norm_results:
+        normalized_payload = r.to_dict()
+        related_iocs = extract_related_iocs(
+            r.source,
+            parsed.value,
+            parsed.type.value,
+            normalized_payload,
+            r.raw or {},
+        )
+        normalized_payload["related_iocs"] = related_iocs
         stmt_del = SourceResult.__table__.delete().where(
             (SourceResult.ioc_id == ioc.id) &
             (SourceResult.source == r.source)
@@ -239,7 +249,7 @@ async def analyze_single(
             source     = r.source,
             status     = r.status,
             raw_json   = json.dumps(r.raw or {}),
-            normalized = json.dumps(r.to_dict(), default=str),
+            normalized = json.dumps(normalized_payload, default=str),
             fetched_at = now,
         )
         db.add(sr)
