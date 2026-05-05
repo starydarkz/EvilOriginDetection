@@ -8,6 +8,12 @@ _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 _HASH_RE = re.compile(r"\b[a-fA-F0-9]{32}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{64}\b|\b[a-fA-F0-9]{128}\b")
 _DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}\.?$")
 _URL_RE = re.compile(r"^https?://", re.I)
+_IP_DOMAIN_RE = re.compile(
+    r"^((?:25[0-5]|2[0-4]\d|[01]?\d\d?)\."
+    r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\."
+    r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\."
+    r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?))(.+)$"
+)
 
 
 def _as_dict(value) -> dict:
@@ -85,6 +91,23 @@ def _add_text_iocs(out: list[dict], seen: set[tuple[str, str]], text, source: st
         _add(out, seen, h, source, relationship, "hash", "suspicious")
 
 
+def _split_vt_resolution_id(value: str) -> tuple[str, str]:
+    value = _clean_value(value)
+    if not value:
+        return "", ""
+    m = _IP_DOMAIN_RE.match(value)
+    if m:
+        ip = m.group(1)
+        host = m.group(2).strip()
+        if infer_ioc_type(host) == "domain":
+            return ip, host
+    if infer_ioc_type(value) == "ip":
+        return value, ""
+    if infer_ioc_type(value) == "domain":
+        return "", value
+    return "", ""
+
+
 def extract_related_iocs(source: str, ioc_value: str, ioc_type: str,
                          normalized: dict | None, raw: dict | None) -> list[dict]:
     normalized = _as_dict(normalized)
@@ -136,9 +159,14 @@ def extract_related_iocs(source: str, ioc_value: str, ioc_type: str,
     for item in _as_list(relations.get("resolutions")):
         item = _as_dict(item)
         attr = _as_dict(item.get("attributes"))
-        add(attr.get("ip_address"), "dns-resolution", "ip")
-        add(attr.get("host_name"), "dns-resolution", "domain")
-        add(item.get("id"), "dns-resolution", None)
+        ip_value = attr.get("ip_address")
+        host_value = attr.get("host_name")
+        if not ip_value or not host_value:
+            split_ip, split_host = _split_vt_resolution_id(item.get("id"))
+            ip_value = ip_value or split_ip
+            host_value = host_value or split_host
+        add(ip_value, "dns-resolution", "ip")
+        add(host_value, "dns-resolution", "domain")
     for key, relationship in (("contacted_ips", "contacted"), ("contacted_domains", "contacted")):
         for item in _as_list(relations.get(key)):
             item = _as_dict(item)

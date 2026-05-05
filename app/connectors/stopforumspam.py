@@ -36,6 +36,7 @@ from .base import BaseConnector, NormalizedResult
 from typing import ClassVar
 
 BASE = "https://api.stopforumspam.org/api"
+SEARCH = "https://www.stopforumspam.com/search"
 
 # Regex to extract emails from free-text evidence fields
 EMAIL_RE = re.compile(
@@ -74,6 +75,16 @@ class StopForumSpamConnector(BaseConnector):
                     })
                     if r2.status_code == 200:
                         data["_nobadip"] = r2.json()
+                except Exception:
+                    pass
+
+                try:
+                    r3 = await c.get(SEARCH, params={"q": ioc.value})
+                    if r3.status_code == 200:
+                        page = r3.text
+                        emails = sorted(set(e.lower() for e in EMAIL_RE.findall(page)))
+                        if emails:
+                            data["_search_page_emails"] = emails[:25]
                 except Exception:
                     pass
 
@@ -156,6 +167,17 @@ class StopForumSpamConnector(BaseConnector):
                         "date":     entry.get("date"),
                         "username": entry.get("username", ""),
                     })
+
+            for email in (raw.get("_search_page_emails") or []):
+                if isinstance(email, str) and "@" in email:
+                    email = email.strip().lower()
+                    if email not in seen:
+                        seen.add(email)
+                        associated_emails.append({
+                            "email": email,
+                            "date": None,
+                            "username": "",
+                        })
 
             if associated_emails:
                 raw["_associated_emails"] = associated_emails[:10]

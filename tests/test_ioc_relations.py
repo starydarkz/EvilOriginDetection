@@ -84,3 +84,23 @@ def test_extract_virustotal_related_iocs():
     assert values["c2.example.org"]["relationship"] == "contacted"
     assert values["a" * 64]["type"] == "hash"
     assert values["a" * 64]["file_name"] == "evil.exe"
+
+
+def test_extract_virustotal_splits_concatenated_resolution_ids():
+    related = extract_related_iocs(
+        "virustotal",
+        "185.220.101.47",
+        "ip",
+        {},
+        {
+            "_relations": {
+                "resolutions": [
+                    {"id": "185.220.101.47tor-exit-47.for-privacy.net"},
+                ],
+            }
+        },
+    )
+    values = _by_value(related)
+
+    assert "tor-exit-47.for-privacy.net" in values
+    assert "185.220.101.47tor-exit-47.for-privacy.net" not in values
