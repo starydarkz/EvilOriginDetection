@@ -42,6 +42,8 @@ def infer_ioc_type(value: str) -> str | None:
 
 
 def _clean_value(value) -> str:
+    if isinstance(value, (dict, list, tuple, set)):
+        return ""
     return str(value or "").strip().strip("'").strip('"').rstrip(".,;)")
 
 

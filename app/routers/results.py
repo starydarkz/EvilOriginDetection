@@ -629,6 +629,11 @@ async def _graph_data_inner(ioc_id: int, db):
     def add_node(node_id, label, ntype, verdict="unknown", score=None,
                  source=None, reason=None, **extra):
         """Add node only if it's an IOC type and not already seen."""
+        if isinstance(label, (dict, list, tuple, set)):
+            return False
+        label = str(label or "").strip()
+        if not label:
+            return False
         if ntype not in IOC_TYPES:
             return False
         if label in seen_nodes:
@@ -665,15 +670,22 @@ async def _graph_data_inner(ioc_id: int, db):
     central_id = f"ioc_{ioc.id}"
 
     def _safe_node_id(prefix: str, value: str) -> str:
+        if isinstance(value, (dict, list, tuple, set)):
+            value = ""
+        value = str(value or "")
         return f"{prefix}_{re.sub(r'[^a-zA-Z0-9_.:-]+', '_', value)[:80]}"
 
     def _looks_like_ip(value: str) -> bool:
+        if isinstance(value, (dict, list, tuple, set)):
+            return False
         return bool(re.match(
             r"^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$",
             value or ""
         )) or ":" in (value or "")
 
     def _looks_like_domain(value: str) -> bool:
+        if isinstance(value, (dict, list, tuple, set)):
+            return False
         value = (value or "").strip()
         return "." in value and "@" not in value and not value.startswith("http")
 
