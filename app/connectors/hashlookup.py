@@ -132,7 +132,7 @@ class PassiveDNSConnector(BaseConnector):
     async def _fetch(self, ioc: ParsedIOC) -> dict:
         import httpx
 
-        ip = ioc.value.split(":")[0] if ":" in ioc.value else ioc.value
+        ip = ioc.value
 
         async with httpx.AsyncClient(timeout=self.TIMEOUT,
                                      follow_redirects=True) as c:

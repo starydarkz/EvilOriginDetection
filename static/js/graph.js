@@ -402,7 +402,7 @@
   window.graphAnalyze = function(label, type) {
     const prefixes = {
       ip:'ip=', domain:'domain=', hash:'hash=',
-      url:'url=', email:'mail=', network:'red=', username:'mail='
+      url:'url=', email:'mail=', network:'red='
     };
     const f = document.createElement('form');
     f.method = 'POST'; f.action = '/analyze';
