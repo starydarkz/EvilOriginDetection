@@ -23,18 +23,21 @@
 ## What is EOD?
 
 **Evil Origin Detection** is an open-source threat intelligence correlation platform.
-Paste an IP, domain, hash, URL or email — EOD queries **10 intelligence sources in parallel**, correlates the results, computes a risk score, and presents everything in a single analysis view with a correlation graph, activity timeline, and geolocation map.
+Paste an IP, domain, hash, URL or email — EOD queries multiple intelligence sources in parallel, extracts related indicators, computes a risk score, and presents everything in a single analysis view with a correlation graph, activity timeline, and geolocation map.
 
 ---
 
 ## Features
 
-- **10 sources queried in parallel** via `asyncio.gather()`
+- **Multiple sources queried in parallel** via `asyncio.gather()`
 - **Token rotation** — 2 API keys per source, random selection with fallback
 - **24h result cache** in SQLite with rescan button
 - **Risk scoring** — weighted composite score 0–100
 - **Correlation engine** — 7 heuristics (shared ASN, subnet, malware family, domain-in-URL, tags, PTR)
-- **Interactive graph** — Cytoscape.js with lazy node expansion and pivot-to-analyze
+- **Standalone correlation graph** — `/graph` explorer with multi-IOC loading
+- **Related IOC extraction** — normalizes emails, domains, IPs, URLs, hashes, networks and usernames into `related_iocs`
+- **Graph pivoting** — expand a related node as a new IOC without leaving the graph
+- **Cross-IOC graph correlation** — links loaded IOCs when they share related artifacts
 - **Activity timeline** with direct links to source reports
 - **Geolocation** via Leaflet.js + ip-api.com (no API key needed)
 - **Screenshots** via URLScan.io for URLs and domains
@@ -89,6 +92,52 @@ cp .env.example .env
 uvicorn main:app --reload
 # → http://localhost:8000
 ```
+
+---
+
+## Using the Correlation Graph
+
+EOD includes a standalone graph explorer at:
+
+```
+/graph
+```
+
+You can open it from the home page using **Open Correlation Graph**.
+
+### Analyze directly in the graph
+
+From the home page, type an IOC and click **Analyze in Graph**. This opens:
+
+```
+/graph?ioc=185.220.101.47
+```
+
+The graph page will auto-load the IOC, call the JSON analyze API, then fetch its graph data.
+
+### Expand related artifacts
+
+When a graph node represents a related IOC, click it and use:
+
+```
+Expand artifacts
+```
+
+This analyzes that node as a new IOC inside the same graph. If that IOC already existed as a related artifact, the graph adds a dashed correlation edge such as:
+
+```
+expanded as IOC: block2.mmms.eu
+```
+
+### Cross-IOC correlations
+
+When multiple IOCs are loaded in `/graph`, the frontend compares their related artifacts by:
+
+```
+type + normalized label
+```
+
+If two loaded IOCs share a domain, hash, email, URL, IP, username or network, the graph adds a dashed correlation edge between the central IOC nodes.
 
 ---
 
@@ -155,6 +204,7 @@ EvilOriginDetection/
 │   ├── parser.py            # IOC input parser + type detection
 │   ├── scoring.py           # Weighted risk score engine
 │   ├── correlator.py        # Cross-IOC correlation heuristics
+│   ├── ioc_relations.py     # Central related IOC extractor
 │   ├── logger.py            # Structured JSON query logging
 │   │
 │   ├── connectors/          # One connector per intelligence source
@@ -172,8 +222,8 @@ EvilOriginDetection/
 │   │   └── whatsmyname.py
 │   │
 │   └── routers/
-│       ├── analyze.py       # POST /analyze
-│       └── results.py       # GET /results/{id} · GET /graph
+│       ├── analyze.py       # POST /analyze · POST /api/analyze
+│       └── results.py       # GET /results/{id} · GET /results/{id}/graph · GET /graph
 │
 ├── templates/               # Jinja2 HTML
 │   ├── base.html            # Layout, nav, themes, cosmos
@@ -200,11 +250,91 @@ EvilOriginDetection/
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Search page |
-| `POST` | `/analyze` | Submit IOC for analysis |
+| `POST` | `/analyze` | Submit IOC for analysis and redirect to `/results/{id}` |
+| `POST` | `/api/analyze` | Submit IOC and return JSON with `ioc_id`, `result_url` and `graph_url` |
 | `GET` | `/results/{id}` | Full analysis page |
 | `GET` | `/results/{id}/graph` | Graph data (JSON for Cytoscape) |
 | `POST` | `/results/{id}/rescan` | Force fresh analysis |
 | `GET` | `/graph` | Correlation graph explorer |
+
+---
+
+## API Usage
+
+Analyze an IOC and receive JSON:
+
+```bash
+curl -X POST http://localhost:8000/api/analyze \
+  -F "ioc_input=185.220.101.47"
+```
+
+Example response:
+
+```json
+{
+  "ioc_id": 1,
+  "value": "185.220.101.47",
+  "type": "ip",
+  "verdict": "malicious",
+  "score": 59,
+  "result_url": "/results/1",
+  "graph_url": "/results/1/graph"
+}
+```
+
+Fetch graph data:
+
+```bash
+curl http://localhost:8000/results/1/graph
+```
+
+The graph endpoint returns Cytoscape-compatible JSON:
+
+```json
+{
+  "nodes": [],
+  "edges": [],
+  "debug": {
+    "ioc": "185.220.101.47",
+    "relation_candidates": {}
+  }
+}
+```
+
+---
+
+## Related IOC Extraction
+
+Connector responses are normalized and enriched through:
+
+```
+app/ioc_relations.py
+```
+
+The extractor reads both:
+
+```
+SourceResult.normalized
+SourceResult.raw_json
+```
+
+and stores extracted artifacts in:
+
+```json
+normalized["related_iocs"]
+```
+
+Supported related IOC types:
+
+- **IP** — IPv4 / IPv6
+- **Domain** — passive DNS, resolutions, contacted domains
+- **URL** — URLScan, WhatsMyName and linked indicators
+- **Email** — StopForumSpam evidence and associated submissions
+- **Hash** — communicating/dropped files and malware artifacts
+- **Network** — CIDR ranges
+- **Username** — spam usernames and account hits
+
+The graph consumes this unified `related_iocs` JSON to create nodes and edges consistently across APIs.
 
 ---
 
@@ -215,6 +345,7 @@ EvilOriginDetection/
 3. Add `MYSOURCE_KEY_1` / `MYSOURCE_KEY_2` to `config.py` and `.env.example`
 4. Import and instantiate in `app/routers/analyze.py` → `build_connectors()`
 5. Add to `render.yaml` env vars (value set in Render Dashboard)
+6. If the source returns linked indicators, add extraction rules in `app/ioc_relations.py`
 
 ---
 
