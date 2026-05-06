@@ -37,6 +37,16 @@ def test_network_prefix():
     results = parse_input("red=192.168.1.0/24")
     assert results[0].type == IOCType.network
 
+def test_ipv6_prefix():
+    results = parse_input("ip=2001:4860:4860::8888")
+    assert len(results) == 1
+    assert results[0].type == IOCType.ip
+
+def test_ipv6_network_prefix():
+    results = parse_input("red=2001:db8::/32")
+    assert len(results) == 1
+    assert results[0].type == IOCType.network
+
 def test_auto_detect_ip():
     assert detect_type("8.8.8.8") == IOCType.ip
 
@@ -71,4 +81,12 @@ def test_comma_separated():
 
 def test_unknown_skipped():
     results = parse_input("notavalidioc")
+    assert len(results) == 0
+
+def test_invalid_prefixed_ip_skipped():
+    results = parse_input("ip=999.999.999.999")
+    assert len(results) == 0
+
+def test_invalid_prefixed_hash_skipped():
+    results = parse_input("hash=notahash")
     assert len(results) == 0

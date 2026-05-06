@@ -17,9 +17,10 @@
   script.src     = 'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js';
   script.onerror = () => showEmpty('Graph library unavailable');
   script.onload  = () => {
-    fetch(`/results/${iocId}/graph`)
+    fetch(`/results/${iocId}/graph?t=${Date.now()}`, { cache: 'no-store' })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(data => {
+        if (data.debug) console.debug('[EOD graph debug]', data.debug);
         if (!data.nodes || data.nodes.length === 0) {
           showEmpty('No data to graph');
           return;
@@ -402,7 +403,7 @@
   window.graphAnalyze = function(label, type) {
     const prefixes = {
       ip:'ip=', domain:'domain=', hash:'hash=',
-      url:'url=', email:'mail=', network:'red=', username:'mail='
+      url:'url=', email:'mail=', network:'red='
     };
     const f = document.createElement('form');
     f.method = 'POST'; f.action = '/analyze';

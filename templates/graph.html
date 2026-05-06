@@ -14,10 +14,14 @@
   color:var(--text); margin-right:4px;
 }
 .graph-main {
-  display:flex; flex:1; overflow:hidden;
+  display:flex; flex:1; min-height:0; overflow:hidden;
+}
+.graph-canvas-wrap {
+  position:relative; flex:1; min-width:0; min-height:420px; overflow:hidden;
 }
 #cy {
-  flex:1; background:transparent; cursor:grab;
+  width:100%; height:100%; min-height:420px;
+  background:transparent; cursor:grab;
 }
 #cy:active { cursor:grabbing; }
 
@@ -79,6 +83,14 @@
   color:var(--text3); pointer-events:none;
 }
 .graph-empty-icon { font-size:48px; opacity:0.15; }
+.graph-status {
+  position:absolute; top:14px; left:14px; z-index:20;
+  background:var(--surface-solid); border:0.5px solid var(--border);
+  border-radius:6px; padding:7px 10px;
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color:var(--text2); display:none;
+  box-shadow:0 2px 12px rgba(0,0,0,0.25);
+}
 
 /* Minimap placeholder style */
 #minimap {
@@ -144,7 +156,7 @@ body.light #minimap { background:rgba(240,241,248,0.85); }
   <div class="graph-main">
 
     <!-- Cytoscape canvas -->
-    <div style="position:relative;flex:1;overflow:hidden">
+    <div class="graph-canvas-wrap">
       <div id="cy"></div>
 
       <!-- Empty state -->
@@ -156,6 +168,7 @@ body.light #minimap { background:rgba(240,241,248,0.85); }
           You can add multiple IOCs to find relationships between them.
         </div>
       </div>
+      <div class="graph-status" id="graph-status"></div>
 
       <!-- Zoom controls -->
       <div class="graph-controls">
@@ -191,13 +204,36 @@ body.light #minimap { background:rgba(240,241,248,0.85); }
 // ── State ─────────────────────────────────────────────────────────────
 let cy = null;
 let panelOpen = true;
+let graphReadyPromise = null;
 const loadedIOCs = new Set();  // track which IOC ids are already in graph
+const iocArtifacts = new Map();
+const iocCentralNodes = new Map();
 
 // ── Init Cytoscape ────────────────────────────────────────────────────
 function initGraph() {
-  const script = document.createElement('script');
-  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js';
-  script.onload = () => {
+  graphReadyPromise = new Promise((resolve, reject) => {
+    if (window.cytoscape) {
+      createGraph();
+      resolve(cy);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js';
+    script.onload = () => {
+      createGraph();
+      resolve(cy);
+    };
+    script.onerror = () => {
+      const err = new Error('Could not load graph renderer');
+      showPanelMessage(err.message);
+      showStatus(err.message, true);
+      reject(err);
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function createGraph() {
     cy = cytoscape({
       container: document.getElementById('cy'),
       elements:  [],
@@ -223,8 +259,14 @@ function initGraph() {
     cy.on('tap', evt => {
       if (evt.target === cy) clearPanel();
     });
-  };
-  document.head.appendChild(script);
+    showStatus('Graph ready');
+    setTimeout(hideStatus, 1200);
+}
+
+async function ensureGraphReady() {
+  if (cy) return cy;
+  if (!graphReadyPromise) initGraph();
+  return graphReadyPromise;
 }
 
 // ── Style builder ─────────────────────────────────────────────────────
@@ -342,14 +384,22 @@ async function addIOCToGraph() {
   document.getElementById('empty-state').style.display = 'none';
 
   try {
-    const resp = await fetch('/analyze', { method:'POST', body: form, redirect:'manual' });
-    // Redirect location contains /results/{id}
-    const location = resp.headers.get('location') || resp.url || '';
-    const match    = location.match(/\/results\/(\d+)/);
+    showStatus(`Analyzing ${raw}...`);
+    await ensureGraphReady();
 
-    if (!match) throw new Error('No result ID from analyze');
+    const resp = await fetch('/api/analyze', { method:'POST', body: form });
+    const analyzeData = await resp.json().catch(() => ({}));
 
-    const iocId = match[1];
+    if (!resp.ok) {
+      throw new Error(analyzeData.error || `Analyze failed (${resp.status})`);
+    }
+
+    if (!analyzeData.ioc_id) {
+      throw new Error('No result ID from analyze API');
+    }
+
+    const iocId = String(analyzeData.ioc_id);
+    const centralNodeId = `ioc_${iocId}`;
 
     // Remove loading node
     if (cy) cy.remove(`#${tempId}`);
@@ -361,10 +411,20 @@ async function addIOCToGraph() {
     loadedIOCs.add(iocId);
 
     // Fetch graph data
-    const gResp = await fetch(`/results/${iocId}/graph`);
+    showStatus(`Loading graph for ${analyzeData.value || raw}...`);
+    const gResp = await fetch(analyzeData.graph_url || `/results/${iocId}/graph`);
     const gData = await gResp.json();
 
-    if (cy && gData.nodes) {
+    if (!gResp.ok || gData.error) {
+      throw new Error(gData.error || `Graph failed (${gResp.status})`);
+    }
+
+    if (cy && Array.isArray(gData.nodes)) {
+      const centralNode = gData.nodes.find(n => n.data?.central);
+      const existingArtifactNode = centralNode
+        ? findNodeByIdentity(centralNode.data, centralNode.data.id)
+        : null;
+
       // Add new nodes (skip existing)
       gData.nodes.forEach(n => {
         if (!cy.getElementById(n.data.id).length) {
@@ -378,16 +438,28 @@ async function addIOCToGraph() {
         }
       });
 
+      if (existingArtifactNode && centralNode) {
+        addExpansionEdge(existingArtifactNode.id(), centralNode.data.id, centralNode.data.label);
+      }
+
+      indexIOCArtifacts(iocId, centralNodeId, gData);
+
       // Find cross-IOC correlations if >1 IOC loaded
       if (loadedIOCs.size > 1) {
         await fetchCorrelations(iocId);
       }
 
       relayout();
+      showStatus(`Added ${gData.nodes.length} nodes / ${gData.edges?.length || 0} edges`);
+      showGraphSummary(gData);
+      setTimeout(hideStatus, 1800);
+    } else {
+      throw new Error('Invalid graph response');
     }
   } catch(err) {
     if (cy) cy.remove(`#${tempId}`);
     console.error('Graph add error:', err);
+    showStatus(`Error: ${err.message}`, true);
     showPanelMessage(`Error loading IOC: ${err.message}`);
   }
 
@@ -396,9 +468,130 @@ async function addIOCToGraph() {
 
 // ── Fetch correlations between loaded IOCs ────────────────────────────
 async function fetchCorrelations(newIocId) {
-  // For each existing IOC already in graph, check correlations
-  // This is a best-effort client-side merge — server does the real work
-  // Future: implement a /correlate endpoint that accepts multiple IOC ids
+  const newArtifacts = iocArtifacts.get(String(newIocId));
+  const newCentral = iocCentralNodes.get(String(newIocId));
+  if (!cy || !newArtifacts || !newCentral) return;
+
+  let added = 0;
+  for (const [otherIocId, otherArtifacts] of iocArtifacts.entries()) {
+    if (String(otherIocId) === String(newIocId)) continue;
+    const otherCentral = iocCentralNodes.get(String(otherIocId));
+    if (!otherCentral) continue;
+
+    const shared = [];
+    for (const [key, artifact] of newArtifacts.entries()) {
+      if (otherArtifacts.has(key)) shared.push(artifact);
+    }
+    if (!shared.length) continue;
+
+    const source = otherCentral < newCentral ? otherCentral : newCentral;
+    const target = otherCentral < newCentral ? newCentral : otherCentral;
+    const edgeId = `corr_${source}_${target}`;
+    const score = Math.min(100, 35 + shared.length * 15);
+    const label = shared.length === 1
+      ? `shared ${shared[0].type}: ${shared[0].label}`
+      : `${shared.length} shared artifacts`;
+
+    if (cy.getElementById(edgeId).length) {
+      const edge = cy.getElementById(edgeId);
+      edge.data('score', Math.max(edge.data('score') || 0, score));
+      edge.data('label', label);
+      edge.data('shared', shared.slice(0, 12));
+      continue;
+    }
+
+    cy.add({
+      group: 'edges',
+      data: {
+        id: edgeId,
+        source,
+        target,
+        label,
+        type: 'correlation',
+        score,
+        shared: shared.slice(0, 12),
+      },
+      classes: 'correlation',
+    });
+    added += 1;
+  }
+
+  if (added) {
+    showStatus(`Added ${added} cross-IOC correlation${added === 1 ? '' : 's'}`);
+  }
+}
+
+function indexIOCArtifacts(iocId, centralNodeId, gData) {
+  const artifacts = new Map();
+  const central = (gData.nodes || []).find(n => n.data?.central) || null;
+  iocCentralNodes.set(String(iocId), central?.data?.id || centralNodeId);
+
+  if (central?.data) {
+    const centralKey = nodeIdentityKey(central.data);
+    if (centralKey) {
+      artifacts.set(centralKey, {
+        id: central.data.id,
+        label: central.data.label || central.data.id,
+        type: central.data.type || 'unknown',
+        source: 'input',
+        reason: 'searched IOC',
+      });
+    }
+  }
+
+  (gData.nodes || []).forEach(n => {
+    const d = n.data || {};
+    if (!d.id || d.central) return;
+    const key = artifactKey(d);
+    if (!key) return;
+    artifacts.set(key, {
+      id: d.id,
+      label: d.label || d.id,
+      type: d.type || 'unknown',
+      source: d.source || '',
+      reason: d.reason || '',
+    });
+  });
+
+  iocArtifacts.set(String(iocId), artifacts);
+}
+
+function artifactKey(d) {
+  return nodeIdentityKey(d);
+}
+
+function nodeIdentityKey(d) {
+  const type = String(d.type || '').toLowerCase();
+  const label = String(d.label || '').trim().toLowerCase();
+  if (!label) return '';
+  return `${type}:${label}`;
+}
+
+function findNodeByIdentity(data, excludeId='') {
+  const key = nodeIdentityKey(data);
+  if (!key || !cy) return null;
+  const matches = cy.nodes().filter(n =>
+    n.id() !== excludeId && nodeIdentityKey(n.data()) === key
+  );
+  return matches.length ? matches[0] : null;
+}
+
+function addExpansionEdge(existingNodeId, newCentralId, label) {
+  if (!cy || !existingNodeId || !newCentralId || existingNodeId === newCentralId) return;
+  const edgeId = `expand_${existingNodeId}_${newCentralId}`;
+  if (cy.getElementById(edgeId).length) return;
+  cy.add({
+    group: 'edges',
+    data: {
+      id: edgeId,
+      source: existingNodeId,
+      target: newCentralId,
+      label: `expanded as IOC${label ? ': ' + label : ''}`,
+      type: 'correlation',
+      score: 85,
+    },
+    classes: 'correlation',
+  });
 }
 
 // ── Node tap handler ──────────────────────────────────────────────────
@@ -409,22 +602,7 @@ async function onNodeTap(evt) {
   node.select();
   renderPanel(d);
 
-  // Lazy expand: load artifacts for non-central nodes on click
-  if (!d.central && !d.expanded && d.iocId) {
-    node.data('expanded', true);
-    try {
-      const resp  = await fetch(`/results/${d.iocId}/graph`);
-      const gData = await resp.json();
-      gData.nodes.forEach(n => {
-        if (!cy.getElementById(n.data.id).length) cy.add(n);
-      });
-      gData.edges.forEach(e => {
-        const edgeId = `e_${e.data.source}_${e.data.target}`;
-        if (!cy.getElementById(edgeId).length) cy.add({ data: { ...e.data, id: edgeId } });
-      });
-      relayout();
-    } catch(e) { /* silent */ }
-  }
+  // Expansion is explicit through the panel button.
 }
 
 // ── Edge hover handler ────────────────────────────────────────────────
@@ -500,6 +678,49 @@ function showPanelMessage(msg) {
     `<div style="font-size:11px;color:var(--v-suspicious)">${escHtml(msg)}</div>`;
 }
 
+function showGraphSummary(gData) {
+  const nodes = Array.isArray(gData.nodes) ? gData.nodes : [];
+  const edges = Array.isArray(gData.edges) ? gData.edges : [];
+  document.getElementById('panel-body').innerHTML = `
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.12em;
+                text-transform:uppercase;color:var(--text3);margin-bottom:8px">Loaded Graph</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:10px">
+      ${nodes.length} nodes / ${edges.length} edges
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      ${nodes.slice(0, 20).map(n => `
+        <button onclick="focusGraphNode('${escHtml(n.data.id)}')"
+                class="btn btn-ghost btn-sm"
+                style="justify-content:flex-start;font-family:'JetBrains Mono',monospace;font-size:10px">
+          ${escHtml(n.data.label || n.data.id)}
+        </button>
+      `).join('')}
+    </div>`;
+}
+
+function focusGraphNode(nodeId) {
+  if (!cy) return;
+  const node = cy.getElementById(nodeId);
+  if (!node.length) return;
+  cy.resize();
+  cy.fit(node, 80);
+  node.select();
+  onNodeTap({ target: node });
+}
+
+function showStatus(message, isError=false) {
+  const el = document.getElementById('graph-status');
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = 'block';
+  el.style.color = isError ? '#e05c5c' : 'var(--text2)';
+}
+
+function hideStatus() {
+  const el = document.getElementById('graph-status');
+  if (el) el.style.display = 'none';
+}
+
 function togglePanel() {
   panelOpen = !panelOpen;
   document.getElementById('graph-panel').classList.toggle('collapsed', !panelOpen);
@@ -509,31 +730,32 @@ function togglePanel() {
 // ── Graph actions ─────────────────────────────────────────────────────
 function analyzeNode(label, type) {
   const prefix = { ip:'ip=', domain:'domain=', hash:'hash=', url:'url=', email:'mail=' }[type] || '';
-  const form   = document.createElement('form');
-  form.method  = 'POST'; form.action = '/analyze';
-  const inp    = document.createElement('input');
-  inp.type = 'hidden'; inp.name = 'ioc_input'; inp.value = prefix + label;
-  form.appendChild(inp); document.body.appendChild(form); form.submit();
+  document.getElementById('graph-ioc-input').value = prefix + label;
+  addIOCToGraph();
 }
 
 function expandNode(nodeId) {
   const node = cy.getElementById(nodeId);
   if (node.length) {
     node.data('expanded', true);
-    onNodeTap({ target: node });
+    const d = node.data();
+    analyzeNode(d.label || d.id, d.type || '');
   }
 }
 
 function clearGraph() {
   if (cy) cy.elements().remove();
   loadedIOCs.clear();
+  iocArtifacts.clear();
+  iocCentralNodes.clear();
   clearPanel();
   document.getElementById('empty-state').style.display = 'flex';
 }
 
 function relayout() {
   if (!cy || !cy.nodes().length) return;
-  cy.layout({
+  cy.resize();
+  const layout = cy.layout({
     name: 'cose',
     padding: 60,
     nodeRepulsion: () => 8000,
@@ -541,7 +763,13 @@ function relayout() {
     animate: cy.nodes().length < 30,
     animationDuration: 400,
     randomize: false,
-  }).run();
+  });
+  layout.one('layoutstop', () => {
+    cy.resize();
+    cy.fit(undefined, 50);
+    cy.center();
+  });
+  layout.run();
 }
 
 function graphZoomIn()  { cy?.zoom({ level: cy.zoom() * 1.25, renderedPosition: { x: cy.width()/2, y: cy.height()/2 } }); }

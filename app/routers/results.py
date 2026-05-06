@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import IOC, SourceResult, ScanHistory, Correlation
+from app.ioc_relations import extract_related_iocs
 from app.parser import ParsedIOC, IOCType
 
 router    = APIRouter()
@@ -584,6 +585,12 @@ async def _graph_data_inner(ioc_id: int, db):
 
     nodes = []
     edges = []
+    debug = {
+        "ioc": ioc.value,
+        "sources": [],
+        "skipped_sources": [],
+        "relation_candidates": {},
+    }
 
     # Central node
     # Build extra info for hash nodes
@@ -622,6 +629,11 @@ async def _graph_data_inner(ioc_id: int, db):
     def add_node(node_id, label, ntype, verdict="unknown", score=None,
                  source=None, reason=None, **extra):
         """Add node only if it's an IOC type and not already seen."""
+        if isinstance(label, (dict, list, tuple, set)):
+            return False
+        label = str(label or "").strip()
+        if not label:
+            return False
         if ntype not in IOC_TYPES:
             return False
         if label in seen_nodes:
@@ -657,16 +669,73 @@ async def _graph_data_inner(ioc_id: int, db):
 
     central_id = f"ioc_{ioc.id}"
 
+    def _safe_node_id(prefix: str, value: str) -> str:
+        if isinstance(value, (dict, list, tuple, set)):
+            value = ""
+        value = str(value or "")
+        return f"{prefix}_{re.sub(r'[^a-zA-Z0-9_.:-]+', '_', value)[:80]}"
+
+    def _looks_like_ip(value: str) -> bool:
+        if isinstance(value, (dict, list, tuple, set)):
+            return False
+        return bool(re.match(
+            r"^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$",
+            value or ""
+        )) or ":" in (value or "")
+
+    def _looks_like_domain(value: str) -> bool:
+        if isinstance(value, (dict, list, tuple, set)):
+            return False
+        value = (value or "").strip()
+        return "." in value and "@" not in value and not value.startswith("http")
+
+    def _status_value(status) -> str:
+        return getattr(status, "value", status)
+
+    def _as_dict(value) -> dict:
+        return value if isinstance(value, dict) else {}
+
+    def _as_list(value) -> list:
+        return value if isinstance(value, list) else []
+
     for sr in ioc.source_results:
-        if sr.status.value != "ok":
+        status_value = _status_value(sr.status)
+        if status_value != "ok":
+            debug["skipped_sources"].append({
+                "source": sr.source,
+                "status": status_value,
+            })
             continue
         try:
             norm = json.loads(sr.normalized or "{}")
             raw  = json.loads(sr.raw_json   or "{}")
         except Exception:
+            debug["skipped_sources"].append({
+                "source": sr.source,
+                "status": "invalid_json",
+            })
             continue
 
         src = sr.source
+        related_iocs = extract_related_iocs(
+            src,
+            ioc.value,
+            ioc.type.value,
+            norm,
+            raw,
+        )
+        if related_iocs:
+            norm["related_iocs"] = related_iocs
+        debug["sources"].append(src)
+        raw_ip_debug = _as_dict(raw.get("ip", {}))
+        debug["relation_candidates"][src] = {
+            "hostnames": len(norm.get("hostnames") or []),
+            "related_iocs": len(norm.get("related_iocs") or []),
+            "passive_dns": len(norm.get("passive_dns") or []),
+            "associated_emails": len(raw.get("_associated_emails") or []),
+            "evidence": len(raw_ip_debug.get("evidence") or []),
+            "email_reports": norm.get("email_reports"),
+        }
 
         # ── Hostnames / PTR → domain nodes ────────────────────────
         for hostname in (norm.get("hostnames") or [])[:5]:
@@ -677,9 +746,72 @@ async def _graph_data_inner(ioc_id: int, db):
                     add_edge(central_id, nid, "resolves-to", "resolution",
                              source_intel=src)
 
+        # ── Normalized related_iocs — generic connector relations ──
+        for rel in (norm.get("related_iocs") or [])[:10]:
+            if not isinstance(rel, dict):
+                continue
+            val = (rel.get("value") or "").strip()
+            rtype = (rel.get("type") or "").strip().lower()
+            if not val or val == ioc.value:
+                continue
+            if rtype not in IOC_TYPES:
+                if "@" in val:
+                    rtype = "email"
+                elif val.startswith("http"):
+                    rtype = "url"
+                elif _looks_like_ip(val):
+                    rtype = "ip"
+                elif _looks_like_domain(val):
+                    rtype = "domain"
+            if rtype not in IOC_TYPES:
+                continue
+            nid = _safe_node_id(f"rel_{src}", val)
+            reason = rel.get("relationship") or f"Related indicator ({src})"
+            if add_node(nid, val, rtype,
+                        verdict=rel.get("verdict") or "suspicious",
+                        source=src, reason=reason):
+                add_edge(central_id, nid, reason, "threat",
+                         source_intel=src)
+
+        # ── Passive DNS — domains/IPs from normalized records ──────
+        if src == "passivedns":
+            for rec in (norm.get("passive_dns") or [])[:15]:
+                if not isinstance(rec, dict):
+                    continue
+                rrtype = str(rec.get("rrtype") or "").upper()
+                query = (rec.get("query") or "").strip().rstrip(".")
+                answer = (rec.get("answer") or "").strip().rstrip(".")
+                candidates = []
+                if ioc.type.value == "ip":
+                    if query and _looks_like_domain(query):
+                        candidates.append((query, "domain", f"Passive DNS {rrtype} record"))
+                elif ioc.type.value == "domain":
+                    if answer:
+                        atype = "ip" if _looks_like_ip(answer) else "domain"
+                        candidates.append((answer, atype, f"Passive DNS {rrtype} answer"))
+                else:
+                    for val in (query, answer):
+                        if not val or val == ioc.value:
+                            continue
+                        if _looks_like_ip(val):
+                            candidates.append((val, "ip", f"Passive DNS {rrtype} record"))
+                        elif _looks_like_domain(val):
+                            candidates.append((val, "domain", f"Passive DNS {rrtype} record"))
+                for val, rtype, reason in candidates:
+                    if val == ioc.value:
+                        continue
+                    nid = _safe_node_id("pdns", val)
+                    if add_node(nid, val, rtype,
+                                source="passivedns", reason=reason,
+                                first_seen=rec.get("first_seen"),
+                                last_seen=rec.get("last_seen"),
+                                count=rec.get("count")):
+                        add_edge(central_id, nid, "passive-dns", "resolution",
+                                 source_intel="passivedns")
+
         # ── VirusTotal relations ───────────────────────────────────
         if src == "virustotal":
-            relations = raw.get("_relations", {})
+            relations = _as_dict(raw.get("_relations", {}))
 
             # Resolutions: IP↔Domain — add each as a SEPARATE typed node
             # VT quirk: item.id sometimes = IPv6+hostname or IPv4+hostname concatenated
@@ -701,7 +833,8 @@ async def _graph_data_inner(ioc_id: int, db):
                 return item_id, ""
 
             for item in (relations.get("resolutions") or [])[:8]:
-                attr      = item.get("attributes", {}) or {}
+                item = _as_dict(item)
+                attr      = _as_dict(item.get("attributes", {}))
                 ip_addr   = (attr.get("ip_address") or "").strip()
                 host_name = (attr.get("host_name")  or "").strip()
                 item_id   = (item.get("id") or "").strip()
@@ -731,10 +864,11 @@ async def _graph_data_inner(ioc_id: int, db):
                 ("dropped_files",       "drops"),
             ]:
                 for item in (relations.get(rel_key) or [])[:4]:
+                    item = _as_dict(item)
                     fhash = item.get("id", "")
                     if fhash:
                         nid = f"vt_file_{fhash[:12]}"
-                        _item_attrs = item.get("attributes", {}) or {}
+                        _item_attrs = _as_dict(item.get("attributes", {}))
                         _mname = _item_attrs.get("meaningful_name") or None
                         _mf = _item_attrs.get("popular_threat_classification", {})
                         _mf = (_mf.get("suggested_threat_label") or "") if isinstance(_mf, dict) else ""
@@ -754,6 +888,7 @@ async def _graph_data_inner(ioc_id: int, db):
                 ("contacted_domains", "domain", "contacted"),
             ]:
                 for item in (relations.get(rel_key) or [])[:5]:
+                    item = _as_dict(item)
                     val = item.get("id", "")
                     if val:
                         nid = f"vt_{rel_key}_{val}"
@@ -766,6 +901,7 @@ async def _graph_data_inner(ioc_id: int, db):
         # ── Pulsedive linked indicators ────────────────────────────
         if src == "pulsedive":
             for linked_ioc in (raw.get("_linked_iocs") or [])[:5]:
+                linked_ioc = _as_dict(linked_ioc)
                 val  = linked_ioc.get("value", "")
                 ltyp = linked_ioc.get("type", "")
                 if val and ltyp in IOC_TYPES:
@@ -778,8 +914,10 @@ async def _graph_data_inner(ioc_id: int, db):
 
         # ── SecurityTrails — DNS A records ─────────────────────────
         if src == "securitytrails":
-            dns = norm.get("dns_records") or {}
-            for rec in (dns.get("a", {}).get("values", []) or [])[:4]:
+            dns = _as_dict(norm.get("dns_records") or {})
+            a_records = _as_dict(dns.get("a", {}))
+            for rec in (_as_list(a_records.get("values")) or [])[:4]:
+                rec = _as_dict(rec)
                 ip = rec.get("ip", "")
                 if ip:
                     nid = f"st_ip_{ip}"
@@ -803,6 +941,7 @@ async def _graph_data_inner(ioc_id: int, db):
         # ── WhatsMyName — usernames found ──────────────────────────
         if src == "whatsmyname":
             for hit in (norm.get("username_hits") or [])[:5]:
+                hit = _as_dict(hit)
                 site = hit.get("site", "")
                 url  = hit.get("url", "")
                 if url:
@@ -837,20 +976,84 @@ async def _graph_data_inner(ioc_id: int, db):
 
         # ── StopForumSpam — emails associated with this IP ───────
         if src == "stopforumspam":
-            for entry in (raw.get("_associated_emails") or [])[:8]:
+            ip_data = _as_dict(raw.get("ip", {}) or {})
+            spam_frequency = norm.get("email_reports") or ip_data.get("frequency") or 0
+            evidence_entries = list(ip_data.get("evidence") or [])
+            nb_ip = _as_dict(_as_dict(raw.get("_nobadip", {}) or {}).get("ip", {}) or {})
+            evidence_entries.extend(nb_ip.get("evidence") or [])
+            evidence_emails = []
+            seen_evidence_emails = set()
+            email_re = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+
+            for entry in evidence_entries:
+                if not isinstance(entry, dict):
+                    continue
+                for field in ("email", "username", "evidence", "comment"):
+                    val = str(entry.get(field) or "")
+                    for email in email_re.findall(val):
+                        email = email.strip().lower()
+                        if email not in seen_evidence_emails:
+                            seen_evidence_emails.add(email)
+                            evidence_emails.append({
+                                "email": email,
+                                "username": entry.get("username", ""),
+                                "date": entry.get("date"),
+                            })
+
+            if spam_frequency:
+                try:
+                    spam_score = min(100, int(float(spam_frequency)))
+                except Exception:
+                    spam_score = None
+                spam_label = f"{spam_frequency} spam reports"
+                nid = _safe_node_id("sfs_spam", f"{ioc.value}_{spam_frequency}")
+                if add_node(nid, spam_label, "username",
+                            verdict="suspicious",
+                            score=spam_score,
+                            source="stopforumspam",
+                            reason="Forum spam reports for this indicator"):
+                    add_edge(central_id, nid, "reported-for-spam", "threat",
+                             source_intel="stopforumspam")
+
+            associated_entries = list(raw.get("_associated_emails") or [])
+            associated_entries.extend(evidence_emails)
+            for entry in associated_entries[:12]:
+                entry = _as_dict(entry)
                 email = entry.get("email", "")
                 if email and "@" in email:
-                    nid = f"sfs_email_{email}"
+                    nid = _safe_node_id("sfs_email", email)
                     if add_node(nid, email, "email",
                                 verdict="suspicious",
                                 source="stopforumspam",
                                 reason=f"Email used in spam submissions from this IP (StopForumSpam)"):
                         add_edge(central_id, nid, "spam-submission", "threat",
                                  source_intel="stopforumspam")
+                username = str(entry.get("username") or "").strip()
+                if username and "@" not in username and len(username) <= 80:
+                    nid = _safe_node_id("sfs_user", username)
+                    if add_node(nid, username, "username",
+                                verdict="suspicious",
+                                source="stopforumspam",
+                                reason="Username seen in spam submissions (StopForumSpam)"):
+                        add_edge(central_id, nid, "spam-username", "threat",
+                                 source_intel="stopforumspam")
+
+            for entry in evidence_entries[:12]:
+                if not isinstance(entry, dict):
+                    continue
+                username = str(entry.get("username") or "").strip()
+                if username and "@" not in username and len(username) <= 80:
+                    nid = _safe_node_id("sfs_user", username)
+                    if add_node(nid, username, "username",
+                                verdict="suspicious",
+                                source="stopforumspam",
+                                reason="Username seen in spam evidence (StopForumSpam)"):
+                        add_edge(central_id, nid, "spam-username", "threat",
+                                 source_intel="stopforumspam")
 
         # ── URLScan — IPs/domains contacted during scan ────────────
         if src == "urlscan":
-            lists = raw.get("_lists", {}) or {}
+            lists = _as_dict(raw.get("_lists", {}) or {})
             for ip in (lists.get("ips") or [])[:5]:
                 if ip:
                     nid = f"us_ip_{ip}"
@@ -880,8 +1083,7 @@ async def _graph_data_inner(ioc_id: int, db):
         # ── ThreatFox / URLhaus — related IOCs ────────────────────
         if src in ("threatfox", "urlhaus"):
                 for rel in (raw.get("related_iocs") or [])[:6]:
-                    if not isinstance(rel, dict):
-                        continue
+                    rel = _as_dict(rel)
                     val   = (rel.get("value") or "").strip()
                     rtype = rel.get("type", "ip")
                     if not val or val == ioc.value:
@@ -898,7 +1100,7 @@ async def _graph_data_inner(ioc_id: int, db):
                         add_edge(central_id, nid,
                                  rel.get("relationship", "related"),
                                  "threat", source_intel=src)
-    return {"nodes": nodes, "edges": edges}
+    return {"nodes": nodes, "edges": edges, "debug": debug}
 
 
 @router.post("/results/{ioc_id}/rescan")

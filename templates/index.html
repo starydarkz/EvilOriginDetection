@@ -68,6 +68,17 @@
       </button>
     </div>
 
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+      <a href="/graph" class="btn btn-ghost btn-sm"
+         style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.08em">
+        ◎ Open Correlation Graph
+      </a>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openCurrentInGraph()"
+              style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.08em">
+        ↗ Analyze in Graph
+      </button>
+    </div>
+
     <!-- Type quick-select -->
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">
       <span style="font-size:12px;color:var(--text3);align-self:center;
@@ -158,6 +169,11 @@ function toggleHelp() {
   const c = document.getElementById('help-chev');
   const open = b.classList.toggle('open');
   c.textContent = open ? '▲' : '▼';
+}
+function openCurrentInGraph() {
+  const el = document.getElementById('ioc-input');
+  const value = el?.value?.trim();
+  window.location.href = value ? `/graph?ioc=${encodeURIComponent(value)}` : '/graph';
 }
 document.addEventListener('keydown', e => {
   const tag = document.activeElement.tagName;

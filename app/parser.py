@@ -12,6 +12,7 @@ Supports:
 Also auto-detects type when no prefix is provided.
 """
 import re
+import ipaddress
 from dataclasses import dataclass
 from typing import Optional
 from app.models import IOCType
@@ -70,9 +71,8 @@ def detect_type(value: str) -> Optional[IOCType]:
     v = value.strip()
     if _RE["url"].match(v):     return IOCType.url
     if _RE["email"].match(v):   return IOCType.email
-    if _RE["cidr"].match(v):    return IOCType.network
-    if _RE["ipv4"].match(v):    return IOCType.ip
-    if _RE["ipv6"].match(v):    return IOCType.ip
+    if _is_network(v):          return IOCType.network
+    if _is_ip(v):               return IOCType.ip
     if (_RE["sha512"].match(v) or _RE["sha256"].match(v) or
         _RE["sha1"].match(v)   or _RE["md5"].match(v)):
         return IOCType.hash
@@ -86,6 +86,39 @@ def detect_hash_algo(value: str) -> Optional[str]:
     if _RE["sha256"].match(value): return "sha256"
     if _RE["sha512"].match(value): return "sha512"
     return None
+
+
+def _is_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value.strip())
+        return True
+    except ValueError:
+        return False
+
+
+def _is_network(value: str) -> bool:
+    try:
+        ipaddress.ip_network(value.strip(), strict=False)
+        return "/" in value
+    except ValueError:
+        return False
+
+
+def _matches_type(value: str, ioc_type: IOCType) -> bool:
+    v = value.strip()
+    if ioc_type == IOCType.ip:
+        return _is_ip(v)
+    if ioc_type == IOCType.network:
+        return _is_network(v)
+    if ioc_type == IOCType.domain:
+        return bool(_RE["domain"].match(v))
+    if ioc_type == IOCType.hash:
+        return detect_hash_algo(v) is not None
+    if ioc_type == IOCType.url:
+        return bool(_RE["url"].match(v))
+    if ioc_type == IOCType.email:
+        return bool(_RE["email"].match(v))
+    return False
 
 
 # ── Main parser ─────────────────────────────────────────────────────────────────
@@ -117,6 +150,8 @@ def parse_input(raw: str) -> list[ParsedIOC]:
             if prefix in _PREFIXES and rest:
                 ioc_type = _PREFIXES[prefix]
                 value    = rest
+                if not _matches_type(value, ioc_type):
+                    ioc_type = None
 
         # Auto-detect if no valid prefix
         if ioc_type is None:
