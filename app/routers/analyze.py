@@ -271,6 +271,7 @@ async def analyze_single(
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/", response_class=HTMLResponse)
+@router.head("/")
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
